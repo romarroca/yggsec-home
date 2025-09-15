@@ -54,6 +54,7 @@ detect_system() {
     if [[ -f /boot/dietpi/.version ]]; then
         DIETPI_VERSION=$(cat /boot/dietpi/.version)
         log_success "DietPi version $DIETPI_VERSION detected"
+        log_info "DietPi systems often have AdGuard Home and WireGuard pre-installed"
         IS_DIETPI=true
     else
         IS_DIETPI=false
@@ -81,51 +82,77 @@ detect_system() {
     esac
 }
 
+check_existing_packages() {
+    log_info "Checking for existing installations..."
+
+    # Check WireGuard
+    if command -v wg &> /dev/null; then
+        log_success "WireGuard tools already installed"
+        WG_INSTALLED=true
+    else
+        log_info "WireGuard tools not found, will install"
+        WG_INSTALLED=false
+    fi
+
+    # Check Python
+    if command -v python3 &> /dev/null; then
+        PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
+        log_success "Python $PYTHON_VERSION already installed"
+        PYTHON_INSTALLED=true
+    else
+        log_info "Python not found, will install"
+        PYTHON_INSTALLED=false
+    fi
+}
+
 install_system_packages() {
     log_info "Installing system packages..."
 
     # Update package list
     apt update
 
-    # Install essential packages
-    log_info "Installing Python and essential tools..."
-    apt install -y \
-        python3 \
-        python3-pip \
-        python3-venv \
-        python3-dev \
-        python3-setuptools \
-        build-essential \
-        git \
-        curl \
-        wget \
-        nano \
-        htop \
-        net-tools \
-        iproute2 \
-        systemd \
-        sudo
+    # Prepare package lists
+    ESSENTIAL_PACKAGES=""
+    NETWORK_PACKAGES=""
 
-    # Install network and security tools
-    log_info "Installing network and security tools..."
-    apt install -y \
-        iptables \
-        iptables-persistent \
-        wireguard-tools \
-        dnsutils \
-        iputils-ping
+    # Essential packages (always check/install)
+    ESSENTIAL_PACKAGES="git curl wget nano htop net-tools iproute2 systemd sudo unzip rsync ca-certificates gnupg lsb-release software-properties-common"
 
-    # Install optional but useful packages
-    log_info "Installing additional utilities..."
-    apt install -y \
-        unzip \
-        rsync \
-        ca-certificates \
-        gnupg \
-        lsb-release \
-        software-properties-common
+    # Python packages (install if not present)
+    if [[ "$PYTHON_INSTALLED" != true ]]; then
+        log_info "Installing Python and development tools..."
+        ESSENTIAL_PACKAGES="$ESSENTIAL_PACKAGES python3 python3-pip python3-venv python3-dev python3-setuptools build-essential"
+    else
+        log_info "Python already installed, skipping Python packages"
+        # Still install pip and venv if missing
+        if ! command -v pip3 &> /dev/null; then
+            ESSENTIAL_PACKAGES="$ESSENTIAL_PACKAGES python3-pip"
+        fi
+    fi
 
-    log_success "System packages installed"
+    # Network and security tools
+    NETWORK_PACKAGES="iptables iptables-persistent dnsutils iputils-ping"
+
+    # WireGuard (install if not present)
+    if [[ "$WG_INSTALLED" != true ]]; then
+        log_info "Installing WireGuard tools..."
+        NETWORK_PACKAGES="$NETWORK_PACKAGES wireguard-tools"
+    else
+        log_info "WireGuard already installed, skipping"
+    fi
+
+    # Install packages
+    if [[ -n "$ESSENTIAL_PACKAGES" ]]; then
+        log_info "Installing essential packages..."
+        apt install -y $ESSENTIAL_PACKAGES
+    fi
+
+    if [[ -n "$NETWORK_PACKAGES" ]]; then
+        log_info "Installing network and security tools..."
+        apt install -y $NETWORK_PACKAGES
+    fi
+
+    log_success "System packages installation completed"
 }
 
 verify_installation() {
@@ -204,11 +231,42 @@ setup_python_environment() {
 }
 
 install_adguard_home() {
-    log_info "Installing AdGuard Home..."
+    log_info "Checking AdGuard Home installation..."
 
-    read -p "Install AdGuard Home for DNS filtering? (Y/n): " -n 1 -r
+    # Check if AdGuard Home is already installed
+    if systemctl list-unit-files | grep -q "AdGuardHome.service"; then
+        log_success "AdGuard Home already installed and configured"
+
+        # Ensure it's enabled and running
+        if ! systemctl is-enabled --quiet AdGuardHome; then
+            systemctl enable AdGuardHome
+            log_info "Enabled AdGuard Home service"
+        fi
+
+        if ! systemctl is-active --quiet AdGuardHome; then
+            systemctl start AdGuardHome
+            log_info "Started AdGuard Home service"
+        fi
+
+        log_success "AdGuard Home is ready"
+        log_info "Access AdGuard dashboard at http://$(hostname -I | awk '{print $1}'):3000"
+        return
+    fi
+
+    # Check if AdGuard binary exists
+    if command -v AdGuardHome &> /dev/null; then
+        log_success "AdGuard Home binary found, configuring service..."
+        systemctl enable AdGuardHome 2>/dev/null || true
+        systemctl start AdGuardHome 2>/dev/null || true
+        log_success "AdGuard Home configured"
+        return
+    fi
+
+    # If not installed, offer to install
+    read -p "AdGuard Home not found. Install it? (Y/n): " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        log_info "Installing AdGuard Home..."
         # Download and install AdGuard Home
         curl -s -S -L https://raw.githubusercontent.com/AdguardTeam/AdGuardHome/master/scripts/install.sh | sh -s -- -v
 
@@ -332,6 +390,14 @@ show_completion_message() {
     if systemctl is-enabled --quiet AdGuardHome 2>/dev/null; then
         echo "🛡️ AdGuard Home:"
         echo "  Dashboard:   http://$IP_ADDRESS:3000"
+        echo "  Status:      systemctl status AdGuardHome"
+        echo
+    fi
+
+    if command -v wg &> /dev/null; then
+        echo "🔒 WireGuard:"
+        echo "  Status:      wg show"
+        echo "  Config:      Upload via YggSec-Home web interface"
         echo
     fi
     echo "🔒 Security:"
@@ -369,6 +435,7 @@ main() {
 
     check_root
     detect_system
+    check_existing_packages
 
     log_info "Starting complete installation process..."
     echo
