@@ -268,6 +268,166 @@ setup_python_environment() {
     log_success "Python environment configured"
 }
 
+create_adguard_config() {
+    local ADGUARD_CONFIG_DIR="/opt/AdGuardHome"
+    local ADGUARD_CONFIG_FILE="$ADGUARD_CONFIG_DIR/AdGuardHome.yaml"
+
+    # Ensure AdGuard config directory exists
+    mkdir -p "$ADGUARD_CONFIG_DIR"
+
+    # Generate a secure password for admin user
+    local ADMIN_PASSWORD=$(python3 -c "import secrets, string; print(''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12)))")
+
+    # Create pre-configured AdGuard Home configuration
+    cat > "$ADGUARD_CONFIG_FILE" << EOF
+bind_host: 0.0.0.0
+bind_port: 3000
+beta_bind_port: 0
+users:
+  - name: admin
+    password: \$2a\$10\$rSgFyi.xJBpzNc7oOkMq.eTCPMCjU3BqAR5DNSmhqgXACZhLxJtyS
+auth_attempts: 5
+block_auth_min: 15
+http_proxy: ""
+language: en
+theme: auto
+debug_pprof: false
+web_session_ttl: 720
+dns:
+  bind_hosts:
+    - 0.0.0.0
+  port: 53
+  anonymize_client_ip: false
+  protection_enabled: true
+  blocking_mode: default
+  blocking_ipv4: ""
+  blocking_ipv6: ""
+  blocked_response_ttl: 10
+  parental_block_host: family-block.dns.adguard.com
+  safebrowsing_block_host: standard-block.dns.adguard.com
+  ratelimit: 20
+  ratelimit_whitelist: []
+  refuse_any: true
+  upstream_dns:
+    - https://dns10.quad9.net/dns-query
+    - https://dns.cloudflare.com/dns-query
+  upstream_dns_file: ""
+  bootstrap_dns:
+    - 9.9.9.10
+    - 149.112.112.10
+    - 2620:fe::10
+    - 2620:fe::fe:10
+  all_servers: false
+  fastest_addr: false
+  fastest_timeout: 1s
+  allowed_clients: []
+  disallowed_clients: []
+  blocked_hosts:
+    - version.bind
+    - id.server
+    - hostname.bind
+  trusted_proxies:
+    - 127.0.0.0/8
+    - ::1/128
+  cache_size: 4194304
+  cache_ttl_min: 0
+  cache_ttl_max: 0
+  cache_optimistic: false
+  bogus_nxdomain: []
+  aaaa_disabled: false
+  enable_dnssec: false
+  edns_client_subnet:
+    custom_ip: ""
+    enabled: false
+    use_custom: false
+  max_goroutines: 300
+  handle_ddr: true
+  ipset: []
+  ipset_file: ""
+  bootstrap_prefer_ipv6: false
+  upstream_timeout: 10s
+tls:
+  enabled: false
+  server_name: ""
+  force_https: false
+  port_https: 443
+  port_dns_over_tls: 853
+  port_dns_over_quic: 853
+  port_dnscrypt: 0
+  dnscrypt_config_file: ""
+  allow_unencrypted_doh: false
+  certificate_chain: ""
+  private_key: ""
+  certificate_path: ""
+  private_key_path: ""
+  strict_sni_check: false
+querylog:
+  enabled: true
+  file_enabled: true
+  interval: 2160h
+  size_memory: 1000
+  ignored: []
+statistics:
+  enabled: true
+  interval: 24h
+  ignored: []
+filters:
+  - enabled: true
+    url: https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt
+    name: AdGuard DNS filter
+    id: 1
+  - enabled: true
+    url: https://adaway.org/hosts.txt
+    name: AdAway Default Blocklist
+    id: 2
+whitelist_filters: []
+user_rules: []
+dhcp:
+  enabled: false
+  interface_name: ""
+  local_domain_name: lan
+  dhcpv4:
+    gateway_ip: ""
+    subnet_mask: ""
+    range_start: ""
+    range_end: ""
+    lease_duration: 86400
+    icmp_timeout_msec: 1000
+    options: []
+  dhcpv6:
+    range_start: ""
+    lease_duration: 86400
+    ra_slaac_only: false
+    ra_allow_slaac: false
+clients:
+  runtime_sources:
+    whois: true
+    arp: true
+    rdns: true
+    dhcp: true
+    hosts: true
+  persistent: []
+log_file: ""
+log_max_backups: 0
+log_max_size: 100
+log_max_age: 3
+log_compress: false
+log_localtime: false
+verbose: false
+os:
+  group: ""
+  user: ""
+  rlimit_nofile: 0
+schema_version: 27
+EOF
+
+    # Set proper ownership
+    chown -R AdGuardHome:AdGuardHome "$ADGUARD_CONFIG_DIR" 2>/dev/null || true
+
+    log_success "AdGuard Home pre-configured on port 3000"
+    log_info "Default admin credentials: admin / yggsec-admin"
+}
+
 install_adguard_home() {
     log_info "Checking AdGuard Home installation..."
 
@@ -304,16 +464,25 @@ install_adguard_home() {
     read -p "AdGuard Home not found. Install it? (Y/n): " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-        log_info "Installing AdGuard Home..."
+        log_info "Installing and configuring AdGuard Home..."
+
         # Download and install AdGuard Home
         curl -s -S -L https://raw.githubusercontent.com/AdguardTeam/AdGuardHome/master/scripts/install.sh | sh -s -- -v
 
-        # Enable service
+        # Stop the service to configure it
+        systemctl stop AdGuardHome 2>/dev/null || true
+
+        # Create pre-configured AdGuard Home configuration
+        log_info "Creating pre-configured AdGuard Home setup..."
+        create_adguard_config
+
+        # Enable and start service
         systemctl enable AdGuardHome
         systemctl start AdGuardHome
 
-        log_success "AdGuard Home installed and started"
-        log_info "Access AdGuard setup at http://$(hostname -I | awk '{print $1}'):3000"
+        log_success "AdGuard Home installed and configured"
+        log_info "AdGuard Home dashboard: http://$(hostname -I | awk '{print $1}'):3000"
+        log_info "Default login: admin / yggsec-admin"
     else
         log_info "Skipping AdGuard Home installation"
     fi
