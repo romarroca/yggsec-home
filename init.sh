@@ -105,6 +105,15 @@ check_existing_packages() {
     fi
 }
 
+check_package_availability() {
+    local package=$1
+    if apt-cache show "$package" &>/dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 install_system_packages() {
     log_info "Installing system packages..."
 
@@ -116,7 +125,20 @@ install_system_packages() {
     NETWORK_PACKAGES=""
 
     # Essential packages (always check/install)
-    ESSENTIAL_PACKAGES="git curl wget nano htop net-tools iproute2 systemd sudo unzip rsync ca-certificates gnupg lsb-release software-properties-common"
+    ESSENTIAL_PACKAGES="git curl wget nano htop net-tools iproute2 systemd sudo unzip rsync ca-certificates gnupg lsb-release"
+
+    # Optional packages (check availability first)
+    OPTIONAL_PACKAGES="software-properties-common"
+
+    # Add optional packages if available
+    for pkg in $OPTIONAL_PACKAGES; do
+        if check_package_availability "$pkg"; then
+            ESSENTIAL_PACKAGES="$ESSENTIAL_PACKAGES $pkg"
+            log_info "Adding optional package: $pkg"
+        else
+            log_warning "Optional package not available: $pkg (skipping)"
+        fi
+    done
 
     # Python packages (install if not present)
     if [[ "$PYTHON_INSTALLED" != true ]]; then
@@ -141,16 +163,27 @@ install_system_packages() {
         log_info "WireGuard already installed, skipping"
     fi
 
-    # Install packages
+    # Install packages with error handling (temporarily disable strict error checking)
+    set +e
+
     if [[ -n "$ESSENTIAL_PACKAGES" ]]; then
         log_info "Installing essential packages..."
         apt install -y $ESSENTIAL_PACKAGES
+        if [[ $? -ne 0 ]]; then
+            log_warning "Some essential packages failed to install, continuing..."
+        fi
     fi
 
     if [[ -n "$NETWORK_PACKAGES" ]]; then
         log_info "Installing network and security tools..."
         apt install -y $NETWORK_PACKAGES
+        if [[ $? -ne 0 ]]; then
+            log_warning "Some network packages failed to install, continuing..."
+        fi
     fi
+
+    # Re-enable strict error checking
+    set -e
 
     log_success "System packages installation completed"
 }
