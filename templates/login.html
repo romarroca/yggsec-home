@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - YggSec-Home</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- Custom CSS -->
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-card {
+            background: var(--bg-surface);
+            border-radius: 1rem;
+            box-shadow: var(--shadow-lg);
+            max-width: 400px;
+            width: 100%;
+        }
+
+        .login-header {
+            background: var(--yggsec-primary);
+            color: white;
+            border-radius: 1rem 1rem 0 0;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .login-body {
+            padding: 2rem;
+        }
+
+        .theme-toggle {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Theme Toggle -->
+    <div class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+        <i class="bi bi-moon-fill" id="theme-icon"></i>
+    </div>
+
+    <!-- Login Card -->
+    <div class="login-card">
+        <div class="login-header">
+            <i class="bi bi-shield-lock display-4 mb-3"></i>
+            <h3 class="mb-0">YggSec-Home</h3>
+            <p class="mb-0 opacity-75">Secure Parental Control</p>
+        </div>
+
+        <div class="login-body">
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST">
+                <div class="mb-3">
+                    <label for="username" class="form-label">
+                        <i class="bi bi-person me-2"></i>Username
+                    </label>
+                    <input type="text" class="form-control" id="username" name="username" required>
+                </div>
+
+                <div class="mb-4">
+                    <label for="password" class="form-label">
+                        <i class="bi bi-lock me-2"></i>Password
+                    </label>
+                    <input type="password" class="form-control" id="password" name="password" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-box-arrow-in-right me-2"></i>
+                    Login
+                </button>
+            </form>
+
+            <div class="text-center mt-4">
+                <small class="text-muted">
+                    Default login: <strong>admin</strong> / <strong>yggsec-admin</strong>
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Theme Toggle Script -->
+    <script>
+        function toggleTheme() {
+            const html = document.documentElement;
+            const themeIcon = document.getElementById('theme-icon');
+
+            if (html.getAttribute('data-bs-theme') === 'light') {
+                html.setAttribute('data-bs-theme', 'dark');
+                themeIcon.className = 'bi bi-sun-fill';
+                localStorage.setItem('theme', 'dark');
+            } else {
+                html.setAttribute('data-bs-theme', 'light');
+                themeIcon.className = 'bi bi-moon-fill';
+                localStorage.setItem('theme', 'light');
+            }
+        }
+
+        // Initialize theme
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            const html = document.documentElement;
+            const themeIcon = document.getElementById('theme-icon');
+
+            html.setAttribute('data-bs-theme', savedTheme);
+            themeIcon.className = savedTheme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
+        });
+    </script>
+</body>
+</html>

@@ -3,8 +3,10 @@
 import os
 import logging
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
 from werkzeug.utils import secure_filename
+from werkzeug.security import check_password_hash, generate_password_hash
+from functools import wraps
 from pathlib import Path
 
 from config import Config, validate_ip_address, validate_network_mask
@@ -37,7 +39,45 @@ def create_app():
     wireguard_mgr = WireGuardManager(Config.WG_INTERFACE, Config.WG_CONF_DIR)
     system_mgr = SystemManager()
 
+    # Default admin credentials (should be changed after first login)
+    DEFAULT_USERNAME = 'admin'
+    DEFAULT_PASSWORD_HASH = generate_password_hash('yggsec-admin')
+
+    def login_required(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if 'logged_in' not in session:
+                return redirect(url_for('login'))
+            return f(*args, **kwargs)
+        return decorated_function
+
+    @app.route('/login', methods=['GET', 'POST'])
+    def login():
+        """Login page"""
+        if request.method == 'POST':
+            username = request.form.get('username', '').strip()
+            password = request.form.get('password', '')
+
+            # Simple authentication (in production, use proper user management)
+            if username == DEFAULT_USERNAME and check_password_hash(DEFAULT_PASSWORD_HASH, password):
+                session['logged_in'] = True
+                session['username'] = username
+                flash('Login successful', 'success')
+                return redirect(url_for('dashboard'))
+            else:
+                flash('Invalid username or password', 'error')
+
+        return render_template('login.html')
+
+    @app.route('/logout')
+    def logout():
+        """Logout"""
+        session.clear()
+        flash('You have been logged out', 'info')
+        return redirect(url_for('login'))
+
     @app.route('/')
+    @login_required
     def dashboard():
         """Main dashboard"""
         try:
@@ -62,6 +102,7 @@ def create_app():
 
     # Network Management Routes
     @app.route('/api/network/status')
+    @login_required
     def network_status():
         """Get current network configuration"""
         try:

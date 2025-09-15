@@ -21,20 +21,12 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=yggsec-home
 
-# Security settings
+# Basic security settings (compatible with DietPi)
 NoNewPrivileges=yes
-PrivateTmp=yes
-ProtectSystem=strict
-ProtectHome=yes
-ReadWritePaths=/opt/yggsec-home/logs /opt/yggsec-home/uploads /etc/wireguard /etc/dhcpcd.conf
 
 # Resource limits
 LimitNOFILE=1024
 LimitNPROC=512
-
-# Capabilities needed for network and system management
-AmbientCapabilities=CAP_NET_ADMIN CAP_SYS_ADMIN
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_SYS_ADMIN
 
 [Install]
 WantedBy=multi-user.target
