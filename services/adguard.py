@@ -2,6 +2,7 @@ import subprocess
 import logging
 import json
 import requests
+import socket
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -11,7 +12,25 @@ class AdGuardManager:
         self.port = port
         self.service_name = 'AdGuardHome'
         self.config_path = '/opt/AdGuardHome/AdGuardHome.yaml'
-        self.base_url = f'http://localhost:{port}'
+
+    def _get_local_ip(self):
+        """Get the local IP address of the machine"""
+        try:
+            # Connect to a remote address to determine local IP
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect(('8.8.8.8', 80))
+                local_ip = s.getsockname()[0]
+            return local_ip
+        except Exception:
+            # Fallback to localhost if unable to determine IP
+            return 'localhost'
+
+    def _get_base_url(self, use_ip=False):
+        """Get base URL for AdGuard, optionally using IP instead of localhost"""
+        if use_ip:
+            ip = self._get_local_ip()
+            return f'http://{ip}:{self.port}'
+        return f'http://localhost:{self.port}'
 
     def get_service_status(self):
         try:
@@ -23,29 +42,35 @@ class AdGuardManager:
                                   capture_output=True, text=True)
             is_enabled = result.stdout.strip() == 'enabled'
 
-            # Check if AdGuard is responding
+            # Check if AdGuard is responding (use localhost for internal check)
             is_responding = False
+            localhost_url = self._get_base_url(use_ip=False)
             try:
-                response = requests.get(f'{self.base_url}/control/status',
+                response = requests.get(f'{localhost_url}/control/status',
                                       timeout=5)
                 is_responding = response.status_code == 200
             except:
                 pass
 
+            # Use IP address for dashboard URL (for external access)
+            dashboard_url = self._get_base_url(use_ip=True)
+
             return {
                 'active': is_active,
                 'enabled': is_enabled,
                 'responding': is_responding,
-                'dashboard_url': f'{self.base_url}'
+                'dashboard_url': dashboard_url
             }
 
         except Exception as e:
             logger.error(f"Failed to get AdGuard status: {e}")
+            # Fallback URLs
+            dashboard_url = self._get_base_url(use_ip=True)
             return {
                 'active': False,
                 'enabled': False,
                 'responding': False,
-                'dashboard_url': f'{self.base_url}'
+                'dashboard_url': dashboard_url
             }
 
     def start_service(self):
@@ -95,7 +120,8 @@ class AdGuardManager:
 
     def get_stats(self):
         try:
-            response = requests.get(f'{self.base_url}/control/stats',
+            localhost_url = self._get_base_url(use_ip=False)
+            response = requests.get(f'{localhost_url}/control/stats',
                                   timeout=5)
             if response.status_code == 200:
                 return response.json()
@@ -106,7 +132,8 @@ class AdGuardManager:
 
     def get_query_log_config(self):
         try:
-            response = requests.get(f'{self.base_url}/control/querylog_config',
+            localhost_url = self._get_base_url(use_ip=False)
+            response = requests.get(f'{localhost_url}/control/querylog_config',
                                   timeout=5)
             if response.status_code == 200:
                 return response.json()

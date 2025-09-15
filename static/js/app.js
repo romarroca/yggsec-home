@@ -32,11 +32,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     html.setAttribute('data-bs-theme', savedTheme);
     themeIcon.className = savedTheme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
-
-    // Auto-refresh dashboard every 30 seconds
-    if (window.location.pathname === '/') {
-        setInterval(refreshDashboard, 30000);
-    }
 });
 
 // Network Management
@@ -121,7 +116,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.success) {
                     showAlert(data.message, 'success');
                     bootstrap.Modal.getInstance(document.getElementById('networkModal')).hide();
-                    setTimeout(refreshDashboard, 2000);
                 } else {
                     showAlert(data.error, 'danger');
                 }
@@ -151,7 +145,6 @@ function adguardControl(action) {
     .then(data => {
         if (data.success) {
             showAlert(data.message, 'success');
-            setTimeout(refreshDashboard, 1000);
         } else {
             showAlert(data.message || 'AdGuard operation failed', 'danger');
         }
@@ -202,7 +195,6 @@ function wireguardControl(action) {
     .then(data => {
         if (data.success) {
             showAlert(data.message, 'success');
-            setTimeout(refreshDashboard, 1000);
         } else {
             showAlert(data.message || 'WireGuard operation failed', 'danger');
         }
@@ -253,7 +245,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     showAlert(data.message, 'success');
                     bootstrap.Modal.getInstance(document.getElementById('wireguardModal')).hide();
                     fileInput.value = '';
-                    setTimeout(refreshDashboard, 1000);
                 } else {
                     showAlert(data.message || 'Upload failed', 'danger');
                 }
@@ -300,7 +291,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.success) {
                     showAlert(data.message, 'success');
                     bootstrap.Modal.getInstance(document.getElementById('wireguardEditModal')).hide();
-                    setTimeout(refreshDashboard, 1000);
                 } else {
                     showAlert(data.message || 'Save failed', 'danger');
                 }
@@ -469,12 +459,6 @@ function showAlert(message, type = 'info') {
     }, 5000);
 }
 
-function refreshDashboard() {
-    // Only refresh if we're on the dashboard page
-    if (window.location.pathname === '/') {
-        window.location.reload();
-    }
-}
 
 // Loading state management
 function setLoadingState(element, loading = true) {
@@ -491,44 +475,3 @@ function setLoadingState(element, loading = true) {
     }
 }
 
-// Auto-refresh status indicators
-function updateStatusIndicators() {
-    // Update network status
-    fetch('/api/network/status')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Update network status display
-                console.log('Network status updated');
-            }
-        })
-        .catch(error => console.error('Network status update failed:', error));
-
-    // Update AdGuard status
-    fetch('/api/adguard/status')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Update AdGuard status display
-                console.log('AdGuard status updated');
-            }
-        })
-        .catch(error => console.error('AdGuard status update failed:', error));
-
-    // Update WireGuard status
-    fetch('/api/wireguard/status')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Update WireGuard status display
-                console.log('WireGuard status updated');
-            }
-        })
-        .catch(error => console.error('WireGuard status update failed:', error));
-}
-
-// Initialize auto-refresh for status indicators
-document.addEventListener('DOMContentLoaded', function() {
-    // Refresh status every 10 seconds
-    setInterval(updateStatusIndicators, 10000);
-});
