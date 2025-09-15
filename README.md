@@ -25,6 +25,24 @@ YggSec-Home is a plug-and-play parental control solution designed for ARM SBCs r
 
 ## Quick Start
 
+### 🚀 Development Setup (After Cloning)
+
+```bash
+# Clone the repository
+git clone https://github.com/romarroca/yggsec-home.git
+cd yggsec-home
+
+# One-command setup for development
+./init.sh
+
+# Start development server
+./run.sh
+```
+
+**Access**: `http://localhost:5000`
+
+### 🏠 Production Setup (DietPi)
+
 ### 1. DietPi Base Setup
 
 Flash DietPi to your SD card and complete initial setup:
@@ -277,14 +295,15 @@ htop
 git clone https://github.com/romarroca/yggsec-home.git
 cd yggsec-home
 
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+# One-command initialization
+./init.sh
 
-# Run in development mode
+# Start development server
+./run.sh
+
+# Alternative manual start:
+source venv/bin/activate
 export FLASK_ENV=development
-export SECRET_KEY=dev-key
 python app.py
 ```
 
