@@ -13,6 +13,7 @@
 
     <!-- Custom CSS -->
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/nordic-theme.css') }}" rel="stylesheet">
 
     {% block head %}{% endblock %}
 </head>
@@ -26,7 +27,7 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container">
             <a class="navbar-brand fw-bold" href="{{ url_for('dashboard') }}">
-                <i class="bi bi-shield-lock me-2"></i>
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="YggSec Logo">
                 YggSec-Home
             </a>
 
