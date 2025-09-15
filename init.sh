@@ -297,8 +297,9 @@ prompt_for_credentials() {
         fi
     done
 
-    # Generate bcrypt hash for AdGuard Home (using Python for consistency)
-    ADMIN_PASSWORD_HASH=$(python3 -c "
+    # Generate bcrypt hash for AdGuard Home (using Python virtual environment)
+    log_info "Generating secure password hash..."
+    ADMIN_PASSWORD_HASH=$("$INSTALL_DIR/venv/bin/python" -c "
 import bcrypt
 password = '$ADMIN_PASSWORD'.encode('utf-8')
 salt = bcrypt.gensalt()
