@@ -2,12 +2,16 @@
 
 import os
 import logging
+import bcrypt
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
 from werkzeug.utils import secure_filename
 from werkzeug.security import check_password_hash, generate_password_hash
 from functools import wraps
 from pathlib import Path
+from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 from config import Config, validate_ip_address, validate_network_mask
 from services.network import NetworkManager
@@ -21,6 +25,40 @@ def create_app():
 
     # Initialize configuration
     Config.init_app(app)
+
+    # Initialize CSRF protection
+    csrf = CSRFProtect(app)
+
+    # Initialize rate limiting
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        default_limits=["100 per hour"],
+        storage_uri="memory://"
+    )
+
+    # Security headers
+    @app.after_request
+    def security_headers(response):
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        response.headers['Content-Security-Policy'] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "font-src 'self' https://cdn.jsdelivr.net; "
+            "img-src 'self' data:; "
+            "connect-src 'self'"
+        )
+        return response
+
+    # Session timeout
+    @app.before_request
+    def session_timeout():
+        session.permanent = True
+        app.permanent_session_lifetime = Config.SESSION_TIMEOUT
 
     # Setup logging
     log_level = logging.DEBUG if app.config['DEBUG'] else logging.INFO
@@ -39,9 +77,10 @@ def create_app():
     wireguard_mgr = WireGuardManager(Config.WG_INTERFACE, Config.WG_CONF_DIR)
     system_mgr = SystemManager()
 
-    # Default admin credentials (should be changed after first login)
-    DEFAULT_USERNAME = 'admin'
-    DEFAULT_PASSWORD_HASH = generate_password_hash('yggsec-admin')
+    # Default admin credentials (configured during installation)
+    DEFAULT_USERNAME = os.environ.get('ADMIN_USERNAME', 'yggsec')
+    DEFAULT_PASSWORD_HASH = os.environ.get('ADMIN_PASSWORD_HASH',
+                                          bcrypt.hashpw('yggsec-admin'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8'))
 
     def login_required(f):
         @wraps(f)
@@ -52,6 +91,7 @@ def create_app():
         return decorated_function
 
     @app.route('/login', methods=['GET', 'POST'])
+    @limiter.limit("5 per minute")
     def login():
         """Login page"""
         if request.method == 'POST':
@@ -59,11 +99,26 @@ def create_app():
             password = request.form.get('password', '')
 
             # Simple authentication (in production, use proper user management)
-            if username == DEFAULT_USERNAME and check_password_hash(DEFAULT_PASSWORD_HASH, password):
-                session['logged_in'] = True
-                session['username'] = username
-                flash('Login successful', 'success')
-                return redirect(url_for('dashboard'))
+            if username == DEFAULT_USERNAME:
+                # Check if we have bcrypt hash or werkzeug hash
+                if DEFAULT_PASSWORD_HASH.startswith('$2a$') or DEFAULT_PASSWORD_HASH.startswith('$2b$'):
+                    # BCrypt hash from installation
+                    if bcrypt.checkpw(password.encode('utf-8'), DEFAULT_PASSWORD_HASH.encode('utf-8')):
+                        session['logged_in'] = True
+                        session['username'] = username
+                        flash('Login successful', 'success')
+                        return redirect(url_for('dashboard'))
+                    else:
+                        flash('Invalid username or password', 'error')
+                else:
+                    # Fallback to werkzeug hash
+                    if check_password_hash(DEFAULT_PASSWORD_HASH, password):
+                        session['logged_in'] = True
+                        session['username'] = username
+                        flash('Login successful', 'success')
+                        return redirect(url_for('dashboard'))
+                    else:
+                        flash('Invalid username or password', 'error')
             else:
                 flash('Invalid username or password', 'error')
 
@@ -119,6 +174,8 @@ def create_app():
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/network/configure', methods=['POST'])
+    @login_required
+    @limiter.limit("10 per minute")
     def configure_network():
         """Configure network settings"""
         try:
@@ -180,6 +237,8 @@ def create_app():
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/adguard/control', methods=['POST'])
+    @login_required
+    @limiter.limit("10 per minute")
     def control_adguard():
         """Control AdGuard Home service"""
         try:
@@ -222,6 +281,8 @@ def create_app():
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/wireguard/upload', methods=['POST'])
+    @login_required
+    @limiter.limit("5 per minute")
     def upload_wireguard_config():
         """Upload WireGuard configuration file"""
         try:
@@ -246,7 +307,43 @@ def create_app():
             app.logger.error(f"WireGuard upload error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
 
+    @app.route('/api/wireguard/config', methods=['GET'])
+    @login_required
+    def get_wireguard_config():
+        """Get current WireGuard configuration"""
+        try:
+            config_content = wireguard_mgr.get_config_content()
+            if config_content is not None:
+                return jsonify({'success': True, 'config': config_content})
+            else:
+                return jsonify({'success': False, 'error': 'No configuration found'}), 404
+
+        except Exception as e:
+            app.logger.error(f"WireGuard config get error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/wireguard/save', methods=['POST'])
+    @login_required
+    @limiter.limit("5 per minute")
+    def save_wireguard_config():
+        """Save edited WireGuard configuration"""
+        try:
+            data = request.get_json()
+            config_content = data.get('config', '').strip()
+
+            if not config_content:
+                return jsonify({'success': False, 'error': 'Configuration content is required'}), 400
+
+            success, message = wireguard_mgr.upload_config(config_content)
+            return jsonify({'success': success, 'message': message})
+
+        except Exception as e:
+            app.logger.error(f"WireGuard config save error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     @app.route('/api/wireguard/control', methods=['POST'])
+    @login_required
+    @limiter.limit("10 per minute")
     def control_wireguard():
         """Control WireGuard tunnel"""
         try:
@@ -282,6 +379,8 @@ def create_app():
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/system/control', methods=['POST'])
+    @login_required
+    @limiter.limit("3 per minute")
     def control_system():
         """Control system operations"""
         try:
@@ -304,6 +403,8 @@ def create_app():
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @app.route('/api/system/password', methods=['POST'])
+    @login_required
+    @limiter.limit("3 per minute")
     def change_password():
         """Change admin password"""
         try:

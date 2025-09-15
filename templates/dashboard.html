@@ -1,217 +1,131 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row">
-    <div class="col-12">
-        <h1 class="mb-4">Dashboard</h1>
-    </div>
-</div>
-
-<!-- Status Cards -->
-<div class="row mb-4">
-    <!-- Network Status -->
-    <div class="col-md-6 col-lg-3 mb-3">
-        <div class="card status-card h-100">
-            <div class="card-header bg-info text-white">
-                <h6 class="card-title mb-0">
-                    <i class="bi bi-ethernet me-2"></i>Network
-                </h6>
-            </div>
-            <div class="card-body">
-                {% if network %}
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <small class="text-muted">Mode:</small>
-                        <span class="badge bg-{{ 'primary' if network.mode == 'static' else 'secondary' }}">
-                            {{ network.mode.upper() }}
-                        </span>
-                    </div>
-                    {% if network.ip %}
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <small class="text-muted">IP:</small>
-                            <span class="fw-bold">{{ network.ip }}</span>
-                        </div>
-                    {% endif %}
-                    {% if network.gateway %}
-                        <div class="d-flex justify-content-between align-items-center">
-                            <small class="text-muted">Gateway:</small>
-                            <span>{{ network.gateway }}</span>
-                        </div>
-                    {% endif %}
+<!-- Clean Status Grid -->
+<div class="row g-4">
+    <!-- Network -->
+    <div class="col-md-6">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="text-primary mb-3">
+                    <i class="bi bi-ethernet" style="font-size: 2.5rem;"></i>
+                </div>
+                <h5 class="card-title">Network</h5>
+                {% if network and network.ip %}
+                    <p class="text-muted mb-1">{{ network.ip }}</p>
+                    <span class="badge bg-primary">{{ network.mode.upper() }}</span>
                 {% else %}
-                    <span class="text-danger">Configuration unavailable</span>
+                    <p class="text-muted mb-1">Not configured</p>
+                    <span class="badge bg-secondary">DISCONNECTED</span>
                 {% endif %}
-            </div>
-            <div class="card-footer">
-                <button class="btn btn-sm btn-outline-primary" onclick="showNetworkModal()">
-                    Configure
-                </button>
+                <div class="mt-3">
+                    <button class="btn btn-outline-primary btn-sm" onclick="showNetworkModal()">
+                        Configure
+                    </button>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- AdGuard Status -->
-    <div class="col-md-6 col-lg-3 mb-3">
-        <div class="card status-card h-100">
-            <div class="card-header bg-success text-white">
-                <h6 class="card-title mb-0">
-                    <i class="bi bi-shield-check me-2"></i>AdGuard Home
-                </h6>
-            </div>
-            <div class="card-body">
+    <!-- AdGuard Home -->
+    <div class="col-md-6">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="text-success mb-3">
+                    <i class="bi bi-shield-check" style="font-size: 2.5rem;"></i>
+                </div>
+                <h5 class="card-title">AdGuard Home</h5>
                 {% if adguard %}
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <small class="text-muted">Status:</small>
-                        <span class="badge bg-{{ 'success' if adguard.active else 'danger' }}">
-                            {{ 'Running' if adguard.active else 'Stopped' }}
-                        </span>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <small class="text-muted">Autostart:</small>
-                        <span class="badge bg-{{ 'primary' if adguard.enabled else 'secondary' }}">
-                            {{ 'Enabled' if adguard.enabled else 'Disabled' }}
-                        </span>
-                    </div>
-                    {% if adguard.responding %}
-                        <div class="d-flex justify-content-between align-items-center">
-                            <small class="text-muted">API:</small>
-                            <span class="text-success">Responding</span>
-                        </div>
-                    {% endif %}
+                    <p class="text-muted mb-1">DNS Protection</p>
+                    <span class="badge bg-{{ 'success' if adguard.active else 'danger' }}">
+                        {{ 'ACTIVE' if adguard.active else 'STOPPED' }}
+                    </span>
                 {% else %}
-                    <span class="text-danger">Service unavailable</span>
+                    <p class="text-muted mb-1">Service unavailable</p>
+                    <span class="badge bg-secondary">OFFLINE</span>
                 {% endif %}
-            </div>
-            <div class="card-footer d-flex gap-1">
-                <button class="btn btn-sm btn-outline-success" onclick="adguardControl('start')"
-                        {% if adguard and adguard.active %}disabled{% endif %}>
-                    Start
-                </button>
-                <button class="btn btn-sm btn-outline-danger" onclick="adguardControl('stop')"
-                        {% if not adguard or not adguard.active %}disabled{% endif %}>
-                    Stop
-                </button>
-                {% if adguard and adguard.dashboard_url %}
-                    <a href="{{ adguard.dashboard_url }}" target="_blank" class="btn btn-sm btn-outline-primary">
-                        Dashboard
-                    </a>
-                {% endif %}
+                <div class="mt-3">
+                    {% if adguard and adguard.active %}
+                        <button class="btn btn-outline-danger btn-sm me-1" onclick="adguardControl('stop')">
+                            Stop
+                        </button>
+                    {% else %}
+                        <button class="btn btn-outline-success btn-sm me-1" onclick="adguardControl('start')">
+                            Start
+                        </button>
+                    {% endif %}
+                    {% if adguard and adguard.dashboard_url %}
+                        <a href="{{ adguard.dashboard_url }}" target="_blank" class="btn btn-outline-primary btn-sm">
+                            Dashboard
+                        </a>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- WireGuard Status -->
-    <div class="col-md-6 col-lg-3 mb-3">
-        <div class="card status-card h-100">
-            <div class="card-header bg-warning text-dark">
-                <h6 class="card-title mb-0">
-                    <i class="bi bi-shield-lock me-2"></i>WireGuard VPN
-                </h6>
-            </div>
-            <div class="card-body">
+    <!-- WireGuard VPN -->
+    <div class="col-md-6">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="text-warning mb-3">
+                    <i class="bi bi-shield-lock" style="font-size: 2.5rem;"></i>
+                </div>
+                <h5 class="card-title">WireGuard VPN</h5>
                 {% if wireguard %}
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <small class="text-muted">Status:</small>
-                        <span class="badge bg-{{ 'success' if wireguard.connected else 'danger' }}">
-                            {{ 'Connected' if wireguard.connected else 'Disconnected' }}
-                        </span>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <small class="text-muted">Config:</small>
-                        <span class="badge bg-{{ 'primary' if wireguard.config_exists else 'secondary' }}">
-                            {{ 'Available' if wireguard.config_exists else 'Missing' }}
-                        </span>
-                    </div>
-                    {% if wireguard.peers %}
-                        <div class="d-flex justify-content-between align-items-center">
-                            <small class="text-muted">Peers:</small>
-                            <span>{{ wireguard.peers|length }}</span>
-                        </div>
-                    {% endif %}
+                    <p class="text-muted mb-1">VPN Tunnel</p>
+                    <span class="badge bg-{{ 'success' if wireguard.connected else 'danger' }}">
+                        {{ 'CONNECTED' if wireguard.connected else 'DISCONNECTED' }}
+                    </span>
                 {% else %}
-                    <span class="text-danger">Service unavailable</span>
+                    <p class="text-muted mb-1">Not configured</p>
+                    <span class="badge bg-secondary">OFFLINE</span>
                 {% endif %}
-            </div>
-            <div class="card-footer d-flex gap-1">
-                <button class="btn btn-sm btn-outline-success" onclick="wireguardControl('start')"
-                        {% if not wireguard or not wireguard.config_exists or wireguard.connected %}disabled{% endif %}>
-                    Connect
-                </button>
-                <button class="btn btn-sm btn-outline-danger" onclick="wireguardControl('stop')"
-                        {% if not wireguard or not wireguard.connected %}disabled{% endif %}>
-                    Disconnect
-                </button>
-                <button class="btn btn-sm btn-outline-primary" onclick="showWireguardModal()">
-                    Upload
-                </button>
+                <div class="mt-3">
+                    {% if wireguard and wireguard.config_exists %}
+                        {% if wireguard.connected %}
+                            <button class="btn btn-outline-danger btn-sm me-1" onclick="wireguardControl('stop')">
+                                Disconnect
+                            </button>
+                        {% else %}
+                            <button class="btn btn-outline-success btn-sm me-1" onclick="wireguardControl('start')">
+                                Connect
+                            </button>
+                        {% endif %}
+                        <button class="btn btn-outline-secondary btn-sm me-1" onclick="showWireguardEditModal()">
+                            Edit
+                        </button>
+                    {% endif %}
+                    <button class="btn btn-outline-primary btn-sm" onclick="showWireguardModal()">
+                        Upload Config
+                    </button>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- System Status -->
-    <div class="col-md-6 col-lg-3 mb-3">
-        <div class="card status-card h-100">
-            <div class="card-header bg-secondary text-white">
-                <h6 class="card-title mb-0">
-                    <i class="bi bi-cpu me-2"></i>System
-                </h6>
-            </div>
-            <div class="card-body">
+    <!-- System -->
+    <div class="col-md-6">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="text-info mb-3">
+                    <i class="bi bi-cpu" style="font-size: 2.5rem;"></i>
+                </div>
+                <h5 class="card-title">System</h5>
                 {% if system %}
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <small class="text-muted">Uptime:</small>
-                        <span class="fw-bold">{{ system.uptime.replace('up ', '') if system.uptime else 'Unknown' }}</span>
-                    </div>
-                    {% if system.memory %}
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <small class="text-muted">Memory:</small>
-                            <span>{{ system.memory.used }}/{{ system.memory.total }}</span>
-                        </div>
-                    {% endif %}
-                    {% if system.disk %}
-                        <div class="d-flex justify-content-between align-items-center">
-                            <small class="text-muted">Disk:</small>
-                            <span>{{ system.disk.usage_percent }}</span>
-                        </div>
-                    {% endif %}
+                    <p class="text-muted mb-1">{{ system.uptime.replace('up ', '') if system.uptime else 'Online' }}</p>
+                    <span class="badge bg-success">RUNNING</span>
                 {% else %}
-                    <span class="text-danger">System info unavailable</span>
+                    <p class="text-muted mb-1">System information</p>
+                    <span class="badge bg-secondary">UNKNOWN</span>
                 {% endif %}
-            </div>
-            <div class="card-footer d-flex gap-1">
-                <button class="btn btn-sm btn-outline-primary" onclick="systemAction('update')">
-                    Update
-                </button>
-                <button class="btn btn-sm btn-outline-warning" onclick="systemAction('reboot')">
-                    Reboot
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Quick Actions -->
-<div class="row">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">Quick Actions</h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <h6>Network Configuration</h6>
-                        <p class="text-muted">Configure static IP or DHCP settings for your device.</p>
-                        <button class="btn btn-primary" onclick="showNetworkModal()">
-                            <i class="bi bi-gear me-2"></i>Configure Network
-                        </button>
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <h6>WireGuard VPN</h6>
-                        <p class="text-muted">Upload and manage WireGuard VPN configuration.</p>
-                        <button class="btn btn-warning" onclick="showWireguardModal()">
-                            <i class="bi bi-upload me-2"></i>Upload VPN Config
-                        </button>
-                    </div>
+                <div class="mt-3">
+                    <button class="btn btn-outline-primary btn-sm me-1" onclick="systemAction('update')">
+                        Update
+                    </button>
+                    <button class="btn btn-outline-warning btn-sm" onclick="systemAction('reboot')">
+                        Reboot
+                    </button>
                 </div>
             </div>
         </div>
@@ -288,6 +202,39 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-primary">Upload Configuration</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- WireGuard Edit Modal -->
+<div class="modal fade" id="wireguardEditModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit WireGuard Configuration</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="wireguardEditForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="configContent" class="form-label">Configuration Content</label>
+                        <textarea class="form-control" id="configContent" rows="15"
+                                  style="font-family: 'Courier New', monospace; font-size: 14px;"
+                                  placeholder="Loading configuration..."></textarea>
+                        <div class="form-text">
+                            Edit the WireGuard configuration directly. Be careful with the syntax.
+                        </div>
+                    </div>
+                    <div class="alert alert-warning">
+                        <strong>Warning:</strong> Editing the configuration will disconnect any active VPN tunnel.
+                        Make sure the syntax is correct before saving.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Configuration</button>
                 </div>
             </form>
         </div>

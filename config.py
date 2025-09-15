@@ -1,6 +1,7 @@
 import os
 import ipaddress
 from pathlib import Path
+from datetime import timedelta
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'yggsec-dev-key-change-in-production'
@@ -30,6 +31,10 @@ class Config:
     BIND_HOST = '0.0.0.0'  # LAN access only via firewall
     BIND_PORT = 5000
     DEBUG = False
+    SESSION_TIMEOUT = timedelta(hours=12)  # 12 hour session timeout
+
+    # CSRF protection
+    WTF_CSRF_TIME_LIMIT = 3600  # 1 hour CSRF token validity
 
     @staticmethod
     def init_app(app):

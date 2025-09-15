@@ -78,6 +78,7 @@
             {% endwith %}
 
             <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="mb-3">
                     <label for="username" class="form-label">
                         <i class="bi bi-person me-2"></i>Username
@@ -100,7 +101,7 @@
 
             <div class="text-center mt-4">
                 <small class="text-muted">
-                    Default login: <strong>admin</strong> / <strong>yggsec-admin</strong>
+                    Default login: <strong>yggsec</strong> / <strong>[password set during installation]</strong>
                 </small>
             </div>
         </div>

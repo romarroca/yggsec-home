@@ -268,6 +268,52 @@ setup_python_environment() {
     log_success "Python environment configured"
 }
 
+prompt_for_credentials() {
+    log_info "Setting up admin credentials..."
+    echo
+    echo "Please set up admin credentials for YggSec-Home and AdGuard Home:"
+    echo "Default username: yggsec"
+    echo
+
+    # Prompt for password with confirmation
+    while true; do
+        echo -n "Enter admin password: "
+        read -s ADMIN_PASSWORD
+        echo
+
+        if [[ ${#ADMIN_PASSWORD} -lt 8 ]]; then
+            log_warning "Password must be at least 8 characters long"
+            continue
+        fi
+
+        echo -n "Confirm admin password: "
+        read -s ADMIN_PASSWORD_CONFIRM
+        echo
+
+        if [[ "$ADMIN_PASSWORD" == "$ADMIN_PASSWORD_CONFIRM" ]]; then
+            break
+        else
+            log_warning "Passwords do not match, please try again"
+        fi
+    done
+
+    # Generate bcrypt hash for AdGuard Home (using Python for consistency)
+    ADMIN_PASSWORD_HASH=$(python3 -c "
+import bcrypt
+password = '$ADMIN_PASSWORD'.encode('utf-8')
+salt = bcrypt.gensalt()
+hash = bcrypt.hashpw(password, salt)
+print(hash.decode('utf-8'))
+")
+
+    # Store credentials globally for use in configuration files
+    export ADMIN_USERNAME="yggsec"
+    export ADMIN_PASSWORD
+    export ADMIN_PASSWORD_HASH
+
+    log_success "Admin credentials configured"
+}
+
 create_adguard_config() {
     local ADGUARD_CONFIG_DIR="/opt/AdGuardHome"
     local ADGUARD_CONFIG_FILE="$ADGUARD_CONFIG_DIR/AdGuardHome.yaml"
@@ -275,17 +321,14 @@ create_adguard_config() {
     # Ensure AdGuard config directory exists
     mkdir -p "$ADGUARD_CONFIG_DIR"
 
-    # Generate a secure password for admin user
-    local ADMIN_PASSWORD=$(python3 -c "import secrets, string; print(''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12)))")
-
     # Create pre-configured AdGuard Home configuration
     cat > "$ADGUARD_CONFIG_FILE" << EOF
 bind_host: 0.0.0.0
 bind_port: 3000
 beta_bind_port: 0
 users:
-  - name: admin
-    password: \$2a\$10\$rSgFyi.xJBpzNc7oOkMq.eTCPMCjU3BqAR5DNSmhqgXACZhLxJtyS
+  - name: yggsec
+    password: $ADMIN_PASSWORD_HASH
 auth_attempts: 5
 block_auth_min: 15
 http_proxy: ""
@@ -425,7 +468,7 @@ EOF
     chown -R AdGuardHome:AdGuardHome "$ADGUARD_CONFIG_DIR" 2>/dev/null || true
 
     log_success "AdGuard Home pre-configured on port 3000"
-    log_info "Default admin credentials: admin / yggsec-admin"
+    log_info "Default admin credentials: yggsec / [password set during installation]"
 }
 
 install_adguard_home() {
@@ -482,7 +525,7 @@ install_adguard_home() {
 
         log_success "AdGuard Home installed and configured"
         log_info "AdGuard Home dashboard: http://$(hostname -I | awk '{print $1}'):3000"
-        log_info "Default login: admin / yggsec-admin"
+        log_info "Default login: yggsec / [password set during installation]"
     else
         log_info "Skipping AdGuard Home installation"
     fi
@@ -514,6 +557,8 @@ Environment=PYTHONPATH=$INSTALL_DIR
 Environment=FLASK_APP=app.py
 Environment=FLASK_ENV=production
 Environment=SECRET_KEY=$SECRET_KEY
+Environment=ADMIN_USERNAME=$ADMIN_USERNAME
+Environment=ADMIN_PASSWORD_HASH=$ADMIN_PASSWORD_HASH
 ExecStart=$INSTALL_DIR/venv/bin/python app.py
 ExecReload=/bin/kill -HUP \$MAINPID
 Restart=always
@@ -689,6 +734,7 @@ main() {
     setup_directories
     copy_application_files
     setup_python_environment
+    prompt_for_credentials
     install_adguard_home
     configure_systemd_services
     setup_firewall

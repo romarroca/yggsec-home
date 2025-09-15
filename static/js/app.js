@@ -1,5 +1,13 @@
 // YggSec-Home JavaScript
 
+// CSRF protection helper
+function getCSRFHeaders() {
+    return {
+        'X-CSRFToken': window.csrf_token,
+        'Content-Type': 'application/json'
+    };
+}
+
 // Theme management
 function toggleTheme() {
     const html = document.documentElement;
@@ -105,9 +113,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             fetch('/api/network/configure', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: getCSRFHeaders(),
                 body: JSON.stringify(data)
             })
             .then(response => response.json())
@@ -138,9 +144,7 @@ function adguardControl(action) {
 
     fetch('/api/adguard/control', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: getCSRFHeaders(),
         body: JSON.stringify(data)
     })
     .then(response => response.json())
@@ -164,14 +168,34 @@ function showWireguardModal() {
     modal.show();
 }
 
+function showWireguardEditModal() {
+    // Load current configuration
+    fetch('/api/wireguard/config')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('configContent').value = data.config;
+            } else {
+                document.getElementById('configContent').value = '';
+                showAlert('Failed to load configuration: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading config:', error);
+            document.getElementById('configContent').value = '';
+            showAlert('Failed to load configuration', 'danger');
+        });
+
+    const modal = new bootstrap.Modal(document.getElementById('wireguardEditModal'));
+    modal.show();
+}
+
 function wireguardControl(action) {
     const data = { action: action };
 
     fetch('/api/wireguard/control', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: getCSRFHeaders(),
         body: JSON.stringify(data)
     })
     .then(response => response.json())
@@ -211,6 +235,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const formData = new FormData();
             formData.append('config_file', file);
+            formData.append('csrf_token', window.csrf_token);
 
             // Show loading state
             const submitBtn = e.target.querySelector('button[type="submit"]');
@@ -236,6 +261,53 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(error => {
                 console.error('Error:', error);
                 showAlert('Upload failed', 'danger');
+            })
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            });
+        });
+    }
+});
+
+// Handle WireGuard edit form
+document.addEventListener('DOMContentLoaded', function() {
+    const wireguardEditForm = document.getElementById('wireguardEditForm');
+    if (wireguardEditForm) {
+        wireguardEditForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const configContent = document.getElementById('configContent').value.trim();
+
+            if (!configContent) {
+                showAlert('Configuration content cannot be empty', 'danger');
+                return;
+            }
+
+            // Show loading state
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+
+            fetch('/api/wireguard/save', {
+                method: 'POST',
+                headers: getCSRFHeaders(),
+                body: JSON.stringify({ config: configContent })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    bootstrap.Modal.getInstance(document.getElementById('wireguardEditModal')).hide();
+                    setTimeout(refreshDashboard, 1000);
+                } else {
+                    showAlert(data.message || 'Save failed', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('Save failed', 'danger');
             })
             .finally(() => {
                 submitBtn.disabled = false;
@@ -298,9 +370,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             fetch('/api/system/password', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: getCSRFHeaders(),
                 body: JSON.stringify(data)
             })
             .then(response => response.json())
@@ -352,9 +422,7 @@ function systemAction(action) {
 
     fetch('/api/system/control', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: getCSRFHeaders(),
         body: JSON.stringify(data)
     })
     .then(response => response.json())

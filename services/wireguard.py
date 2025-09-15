@@ -116,6 +116,19 @@ class WireGuardManager:
 
         return True, "Configuration is valid"
 
+    def get_config_content(self):
+        """Get current WireGuard configuration content"""
+        try:
+            if not self.config_file.exists():
+                return None
+
+            with open(self.config_file, 'r') as f:
+                return f.read()
+
+        except Exception as e:
+            logger.error(f"Failed to read config file: {e}")
+            return None
+
     def upload_config(self, content):
         """Upload and validate WireGuard configuration"""
         try:
