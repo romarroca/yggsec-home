@@ -50,12 +50,29 @@ class NetworkManager:
             except FileNotFoundError:
                 pass
 
-            # Check if static config exists
+            # Check if static config exists for this interface
             if Path(self.dhcpcd_conf).exists():
                 with open(self.dhcpcd_conf, 'r') as f:
-                    content = f.read()
-                    if f'interface {self.interface}' in content and 'static ip_address' in content:
+                    lines = f.readlines()
+
+                in_interface_section = False
+                for line in lines:
+                    line_stripped = line.strip()
+
+                    # Check for start of our interface section
+                    if line_stripped == f'interface {self.interface}':
+                        in_interface_section = True
+                        continue
+
+                    # Check for start of another interface section
+                    elif line_stripped.startswith('interface ') and in_interface_section:
+                        in_interface_section = False
+                        break
+
+                    # If we're in our interface section and find static ip_address
+                    elif in_interface_section and line_stripped.startswith('static ip_address'):
                         config['mode'] = 'static'
+                        break
 
             return config
 
@@ -161,3 +178,22 @@ static domain_name_servers={' '.join(dns_servers)}
             }
         except subprocess.CalledProcessError:
             return {'up': False, 'connected': False}
+
+    def get_dhcpcd_config_status(self):
+        """Debug method to check dhcpcd.conf content"""
+        try:
+            if not Path(self.dhcpcd_conf).exists():
+                return {"exists": False, "content": None}
+
+            with open(self.dhcpcd_conf, 'r') as f:
+                content = f.read()
+
+            return {
+                "exists": True,
+                "content": content,
+                "has_interface": f'interface {self.interface}' in content,
+                "has_static_ip": 'static ip_address' in content
+            }
+        except Exception as e:
+            logger.error(f"Failed to read dhcpcd.conf: {e}")
+            return {"exists": False, "error": str(e)}

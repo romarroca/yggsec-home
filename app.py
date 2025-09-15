@@ -173,6 +173,25 @@ def create_app():
             app.logger.error(f"Network status error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
 
+    @app.route('/api/network/debug')
+    @login_required
+    def network_debug():
+        """Debug network configuration"""
+        try:
+            config = network_mgr.get_current_config()
+            interface_status = network_mgr.get_interface_status()
+            dhcpcd_status = network_mgr.get_dhcpcd_config_status()
+
+            return jsonify({
+                'success': True,
+                'config': config,
+                'interface': interface_status,
+                'dhcpcd': dhcpcd_status
+            })
+        except Exception as e:
+            app.logger.error(f"Network debug error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     @app.route('/api/network/configure', methods=['POST'])
     @login_required
     @limiter.limit("10 per minute")
