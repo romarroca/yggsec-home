@@ -1,6 +1,6 @@
 #!/bin/bash
-# YggSec-Home Development Initialization Script
-# Quick setup for development and testing
+# YggSec-Home Complete Installation Script
+# Automated production deployment for DietPi and Debian-based systems
 
 set -e
 
@@ -12,8 +12,10 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Configuration
-PYTHON_MIN_VERSION="3.8"
-DEV_PORT="5000"
+INSTALL_DIR="/opt/yggsec-home"
+SERVICE_USER="root"
+WEB_PORT="5000"
+CURRENT_DIR="$(pwd)"
 
 # Functions
 log_info() {
@@ -32,274 +34,360 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-check_python() {
-    log_info "Checking Python installation..."
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        log_error "This script must be run as root"
+        log_info "Run: sudo ./init.sh"
+        exit 1
+    fi
+}
 
+detect_system() {
+    log_info "Detecting system..."
+
+    if [[ -f /etc/os-release ]]; then
+        . /etc/os-release
+        log_info "Detected: $PRETTY_NAME"
+    fi
+
+    # Check if it's DietPi
+    if [[ -f /boot/dietpi/.version ]]; then
+        DIETPI_VERSION=$(cat /boot/dietpi/.version)
+        log_success "DietPi version $DIETPI_VERSION detected"
+        IS_DIETPI=true
+    else
+        IS_DIETPI=false
+        log_info "Standard Debian/Ubuntu system detected"
+    fi
+
+    # Detect architecture
+    ARCH=$(uname -m)
+    case $ARCH in
+        x86_64)
+            log_info "Architecture: x86_64 (VMware/PC)"
+            ;;
+        aarch64|arm64)
+            log_info "Architecture: ARM64"
+            ;;
+        armv7l)
+            log_info "Architecture: ARM32v7"
+            ;;
+        armv6l)
+            log_info "Architecture: ARM32v6 (Pi Zero)"
+            ;;
+        *)
+            log_warning "Unknown architecture: $ARCH"
+            ;;
+    esac
+}
+
+install_system_packages() {
+    log_info "Installing system packages..."
+
+    # Update package list
+    apt update
+
+    # Install essential packages
+    log_info "Installing Python and essential tools..."
+    apt install -y \
+        python3 \
+        python3-pip \
+        python3-venv \
+        python3-dev \
+        python3-setuptools \
+        build-essential \
+        git \
+        curl \
+        wget \
+        nano \
+        htop \
+        net-tools \
+        iproute2 \
+        systemd \
+        sudo
+
+    # Install network and security tools
+    log_info "Installing network and security tools..."
+    apt install -y \
+        iptables \
+        iptables-persistent \
+        wireguard-tools \
+        dnsutils \
+        iputils-ping
+
+    # Install optional but useful packages
+    log_info "Installing additional utilities..."
+    apt install -y \
+        unzip \
+        rsync \
+        ca-certificates \
+        gnupg \
+        lsb-release \
+        software-properties-common
+
+    log_success "System packages installed"
+}
+
+verify_installation() {
+    log_info "Verifying installations..."
+
+    # Check Python
     if ! command -v python3 &> /dev/null; then
-        log_error "Python 3 is not installed. Please install Python 3.8+ first."
-        echo "  Ubuntu/Debian: sudo apt install python3 python3-pip python3-venv"
-        echo "  macOS: brew install python3"
-        echo "  Windows: Download from python.org"
+        log_error "Python 3 installation failed"
         exit 1
     fi
 
     PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
-    log_info "Found Python $PYTHON_VERSION"
+    log_info "Python $PYTHON_VERSION installed"
 
-    # Simple version check
-    if python3 -c "import sys; exit(0 if sys.version_info >= (3, 8) else 1)"; then
-        log_success "Python version is compatible"
-    else
-        log_error "Python $PYTHON_MIN_VERSION+ is required, found $PYTHON_VERSION"
+    # Check pip
+    if ! command -v pip3 &> /dev/null; then
+        log_error "pip3 installation failed"
         exit 1
     fi
+
+    log_success "All installations verified"
 }
 
-check_git() {
-    if ! command -v git &> /dev/null; then
-        log_warning "Git is not installed. Some features may not work."
-        echo "  Ubuntu/Debian: sudo apt install git"
-        echo "  macOS: brew install git"
-        echo "  Windows: Download from git-scm.com"
-    else
-        log_success "Git is available"
-    fi
-}
+setup_directories() {
+    log_info "Setting up directories..."
 
-setup_virtual_environment() {
-    log_info "Setting up Python virtual environment..."
-
-    if [[ -d "venv" ]]; then
-        log_warning "Virtual environment already exists, removing..."
-        rm -rf venv
+    # Remove existing installation if present
+    if [[ -d "$INSTALL_DIR" ]]; then
+        log_warning "Existing installation found, backing up..."
+        mv "$INSTALL_DIR" "$INSTALL_DIR.backup.$(date +%Y%m%d-%H%M%S)"
     fi
 
-    python3 -m venv venv
-    log_success "Virtual environment created"
-
-    # Activate virtual environment
-    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
-        source venv/Scripts/activate
-    else
-        source venv/bin/activate
-    fi
-
-    log_info "Virtual environment activated"
-}
-
-install_dependencies() {
-    log_info "Installing Python dependencies..."
-
-    # Upgrade pip first
-    pip install --upgrade pip
-
-    # Install requirements
-    pip install -r requirements.txt
-
-    log_success "Dependencies installed"
-}
-
-create_directories() {
-    log_info "Creating required directories..."
-
-    mkdir -p logs
-    mkdir -p uploads
-
-    # Create empty log file
-    touch logs/yggsec-home.log
+    # Create installation directory
+    mkdir -p "$INSTALL_DIR"
+    mkdir -p "$INSTALL_DIR"/{logs,uploads}
 
     log_success "Directories created"
 }
 
-setup_development_config() {
-    log_info "Setting up development configuration..."
+copy_application_files() {
+    log_info "Copying application files to $INSTALL_DIR..."
 
-    # Create development environment file
-    cat > .env.dev << EOF
-# YggSec-Home Development Configuration
-FLASK_ENV=development
-FLASK_DEBUG=true
-SECRET_KEY=dev-key-change-in-production-$(date +%s)
+    # Copy all files except git directory and temporary files
+    rsync -av \
+        --exclude='.git' \
+        --exclude='__pycache__' \
+        --exclude='*.pyc' \
+        --exclude='venv' \
+        --exclude='logs' \
+        --exclude='uploads' \
+        --exclude='.env*' \
+        "$CURRENT_DIR/" "$INSTALL_DIR/"
 
-# Development settings
-BIND_HOST=127.0.0.1
-BIND_PORT=$DEV_PORT
-DEBUG=true
+    # Set ownership
+    chown -R $SERVICE_USER:$SERVICE_USER "$INSTALL_DIR"
 
-# Paths (relative to project root)
-LOG_DIR=./logs
-UPLOAD_DIR=./uploads
-
-# Development database (if needed)
-DATABASE_URL=sqlite:///yggsec-home-dev.db
-EOF
-
-    log_success "Development configuration created (.env.dev)"
+    log_success "Application files copied"
 }
 
-check_optional_dependencies() {
-    log_info "Checking optional system dependencies..."
+setup_python_environment() {
+    log_info "Setting up Python virtual environment..."
 
-    # Check for WireGuard
-    if command -v wg &> /dev/null; then
-        log_success "WireGuard tools found"
-    else
-        log_warning "WireGuard tools not found - VPN features will be limited"
-        echo "  Ubuntu/Debian: sudo apt install wireguard-tools"
-        echo "  macOS: brew install wireguard-tools"
-    fi
+    cd "$INSTALL_DIR"
 
-    # Check for systemctl (Linux systems)
-    if command -v systemctl &> /dev/null; then
-        log_success "systemctl found - system management available"
-    else
-        log_warning "systemctl not found - some system features disabled"
-    fi
+    # Create virtual environment
+    python3 -m venv venv
 
-    # Check for network tools
-    if command -v ip &> /dev/null; then
-        log_success "Network tools (ip) found"
+    # Upgrade pip in virtual environment
+    ./venv/bin/pip install --upgrade pip
+
+    # Install requirements
+    log_info "Installing Python dependencies..."
+    ./venv/bin/pip install -r requirements.txt
+
+    log_success "Python environment configured"
+}
+
+install_adguard_home() {
+    log_info "Installing AdGuard Home..."
+
+    read -p "Install AdGuard Home for DNS filtering? (Y/n): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        # Download and install AdGuard Home
+        curl -s -S -L https://raw.githubusercontent.com/AdguardTeam/AdGuardHome/master/scripts/install.sh | sh -s -- -v
+
+        # Enable service
+        systemctl enable AdGuardHome
+        systemctl start AdGuardHome
+
+        log_success "AdGuard Home installed and started"
+        log_info "Access AdGuard setup at http://$(hostname -I | awk '{print $1}'):3000"
     else
-        log_warning "Network configuration tools not found"
-        echo "  Ubuntu/Debian: sudo apt install iproute2"
+        log_info "Skipping AdGuard Home installation"
     fi
 }
 
-create_run_script() {
-    log_info "Creating run script..."
+configure_systemd_services() {
+    log_info "Configuring systemd services..."
 
-    cat > run.sh << 'EOF'
-#!/bin/bash
-# YggSec-Home Development Runner
+    cd "$INSTALL_DIR"
 
-# Colors
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+    # Generate random secret key
+    SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
 
-echo -e "${BLUE}Starting YggSec-Home Development Server...${NC}"
+    # Update service file with secret key and correct paths
+    sed -i "s|SECRET_KEY=change-this-in-production|SECRET_KEY=$SECRET_KEY|" systemd/yggsec-home.service
+    sed -i "s|WorkingDirectory=/opt/yggsec-home|WorkingDirectory=$INSTALL_DIR|" systemd/yggsec-home.service
+    sed -i "s|ExecStart=/opt/yggsec-home/venv/bin/python app.py|ExecStart=$INSTALL_DIR/venv/bin/python app.py|" systemd/yggsec-home.service
 
-# Check if virtual environment exists
-if [[ ! -d "venv" ]]; then
-    echo "Virtual environment not found. Run ./init.sh first."
-    exit 1
-fi
+    # Install service files
+    cp systemd/yggsec-home.service /etc/systemd/system/
+    cp systemd/yggsec-home-firewall.service /etc/systemd/system/
 
-# Activate virtual environment
-if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
-    source venv/Scripts/activate
-else
-    source venv/bin/activate
-fi
+    # Update firewall service paths
+    sed -i "s|/opt/yggsec-home/scripts|$INSTALL_DIR/scripts|g" /etc/systemd/system/yggsec-home-firewall.service
 
-# Load development environment
-if [[ -f ".env.dev" ]]; then
-    export $(cat .env.dev | grep -v '^#' | xargs)
-fi
+    # Make scripts executable
+    chmod +x scripts/*.sh
 
-# Set development defaults if not set
-export FLASK_ENV=${FLASK_ENV:-development}
-export FLASK_DEBUG=${FLASK_DEBUG:-true}
-export SECRET_KEY=${SECRET_KEY:-dev-key-please-change}
+    # Reload systemd
+    systemctl daemon-reload
 
-echo -e "${GREEN}Environment loaded:${NC}"
-echo "  FLASK_ENV: $FLASK_ENV"
-echo "  DEBUG: $FLASK_DEBUG"
-echo "  PORT: ${BIND_PORT:-5000}"
-echo ""
-
-echo -e "${BLUE}Access your application at:${NC}"
-echo "  http://localhost:${BIND_PORT:-5000}"
-echo ""
-echo "Press Ctrl+C to stop the server"
-echo ""
-
-# Run the application
-python app.py
-EOF
-
-    chmod +x run.sh
-    log_success "Run script created (./run.sh)"
+    log_success "Systemd services configured"
 }
 
-show_completion() {
-    local IP_ADDRESS=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
+setup_firewall() {
+    log_info "Setting up firewall for security..."
 
-    echo ""
-    echo "=================================================="
-    log_success "YggSec-Home Development Setup Complete!"
-    echo "=================================================="
-    echo ""
-    echo "🚀 Quick Start:"
-    echo "  ./run.sh                 # Start development server"
-    echo ""
-    echo "🌐 Access URLs:"
-    echo "  http://localhost:$DEV_PORT"
-    if [[ "$IP_ADDRESS" != "localhost" ]]; then
-        echo "  http://$IP_ADDRESS:$DEV_PORT"
+    read -p "Configure firewall for LAN-only access? (Y/n): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        systemctl enable yggsec-home-firewall.service
+        systemctl start yggsec-home-firewall.service
+        log_success "Firewall configured for LAN-only access"
+    else
+        log_warning "Firewall setup skipped - web interface accessible from anywhere"
     fi
-    echo ""
-    echo "📁 Project Structure:"
-    echo "  app.py                   # Main application"
-    echo "  config.py                # Configuration"
-    echo "  services/                # Service modules"
-    echo "  templates/               # HTML templates"
-    echo "  static/                  # CSS, JS, images"
-    echo "  logs/                    # Application logs"
-    echo ""
-    echo "🛠️ Development Commands:"
-    echo "  source venv/bin/activate # Activate virtual env"
-    echo "  pip install <package>    # Install new package"
-    echo "  pip freeze > requirements.txt # Update requirements"
-    echo ""
-    echo "⚙️ Configuration:"
-    echo "  .env.dev                 # Development settings"
-    echo "  Edit this file to customize settings"
-    echo ""
+}
+
+start_services() {
+    log_info "Starting YggSec-Home services..."
+
+    # Enable and start main service
+    systemctl enable yggsec-home.service
+    systemctl start yggsec-home.service
+
+    # Wait for service to start
+    sleep 3
+
+    # Check service status
+    if systemctl is-active --quiet yggsec-home.service; then
+        log_success "YggSec-Home service started successfully"
+    else
+        log_error "Failed to start YggSec-Home service"
+        log_info "Checking service logs..."
+        systemctl status yggsec-home.service --no-pager
+        journalctl -u yggsec-home.service --no-pager -n 20
+        exit 1
+    fi
+}
+
+configure_hostname() {
+    log_info "Configuring hostname..."
+
+    read -p "Set hostname to 'yggsec-home' for easy access? (Y/n): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        hostnamectl set-hostname yggsec-home
+
+        # Update /etc/hosts
+        if ! grep -q "yggsec-home" /etc/hosts; then
+            echo "127.0.1.1    yggsec-home" >> /etc/hosts
+        fi
+
+        log_success "Hostname set to yggsec-home"
+    fi
+}
+
+show_completion_message() {
+    local IP_ADDRESS=$(hostname -I | awk '{print $1}')
+
+    echo
+    echo "=================================================================="
+    log_success "YggSec-Home installation completed successfully!"
+    echo "=================================================================="
+    echo
+    echo "🌐 Web Interface Access:"
+    echo "  Local IP:    http://$IP_ADDRESS:$WEB_PORT"
+    echo "  Hostname:    http://yggsec-home.local:$WEB_PORT"
+    echo
+    echo "📋 Service Management:"
+    echo "  Status:      systemctl status yggsec-home"
+    echo "  Start:       systemctl start yggsec-home"
+    echo "  Stop:        systemctl stop yggsec-home"
+    echo "  Restart:     systemctl restart yggsec-home"
+    echo "  Logs:        journalctl -u yggsec-home -f"
+    echo
+    echo "📁 Installation Directory: $INSTALL_DIR"
+    echo "  Configuration: $INSTALL_DIR/config.py"
+    echo "  Logs:         $INSTALL_DIR/logs/"
+    echo "  Uploads:      $INSTALL_DIR/uploads/"
+    echo
+    if systemctl is-enabled --quiet AdGuardHome 2>/dev/null; then
+        echo "🛡️ AdGuard Home:"
+        echo "  Dashboard:   http://$IP_ADDRESS:3000"
+        echo
+    fi
+    echo "🔒 Security:"
+    echo "  - Web interface restricted to LAN access only"
+    echo "  - SSH access maintained on port 22"
+    echo "  - Firewall configured for protection"
+    echo
+    echo "🚀 Next Steps:"
+    echo "  1. Access web interface using URL above"
+    echo "  2. Configure network settings if needed"
+    echo "  3. Set up AdGuard Home (if installed)"
+    echo "  4. Upload WireGuard configuration (if needed)"
+    echo "  5. Change admin password in Settings → Change Password"
+    echo
     echo "📚 Documentation:"
-    echo "  README.md                # Full documentation"
-    echo "  API endpoints documented in app.py"
-    echo ""
-
-    if command -v systemctl &> /dev/null; then
-        echo "🔧 Production Deployment:"
-        echo "  sudo ./scripts/install-dietpi.sh  # Full system install"
-    fi
-
-    echo ""
-    log_info "Ready for development! Run './run.sh' to start the server."
+    echo "  README:      $INSTALL_DIR/README.md"
+    echo "  GitHub:      https://github.com/romarroca/yggsec-home"
+    echo
+    log_success "Installation complete! Enjoy your YggSec-Home setup."
 }
 
-# Main execution
+# Main installation process
 main() {
-    echo "=================================================="
-    echo "  YggSec-Home Development Initialization"
-    echo "=================================================="
-    echo ""
+    echo "=================================================================="
+    echo "  YggSec-Home Complete Installation Script"
+    echo "=================================================================="
+    echo
 
-    # Check if we're in the right directory
+    # Verify we're in the right directory
     if [[ ! -f "app.py" ]] || [[ ! -f "requirements.txt" ]]; then
-        log_error "This script must be run from the YggSec-Home project directory"
-        echo "Make sure you're in the directory containing app.py and requirements.txt"
+        log_error "This script must be run from the YggSec-Home source directory"
+        log_info "Make sure you're in the directory containing app.py and requirements.txt"
         exit 1
     fi
 
-    log_info "Initializing YggSec-Home development environment..."
-    echo ""
+    check_root
+    detect_system
 
-    check_python
-    check_git
-    setup_virtual_environment
-    install_dependencies
-    create_directories
-    setup_development_config
-    check_optional_dependencies
-    create_run_script
-    show_completion
+    log_info "Starting complete installation process..."
+    echo
+
+    install_system_packages
+    verify_installation
+    setup_directories
+    copy_application_files
+    setup_python_environment
+    install_adguard_home
+    configure_systemd_services
+    setup_firewall
+    start_services
+    configure_hostname
+    show_completion_message
 }
 
 # Error handling
-trap 'log_error "Initialization failed at line $LINENO. Check the output above."' ERR
+trap 'log_error "Installation failed at line $LINENO. Check the output above for details."' ERR
 
 # Run main function
 main "$@"

@@ -25,21 +25,26 @@ YggSec-Home is a plug-and-play parental control solution designed for ARM SBCs r
 
 ## Quick Start
 
-### 🚀 Development Setup (After Cloning)
+### 🚀 Complete Installation (Production Ready)
 
 ```bash
 # Clone the repository
 git clone https://github.com/romarroca/yggsec-home.git
 cd yggsec-home
 
-# One-command setup for development
-./init.sh
-
-# Start development server
-./run.sh
+# One-command complete installation
+sudo ./init.sh
 ```
 
-**Access**: `http://localhost:5000`
+This script will:
+- Install all system packages (Python, WireGuard, etc.)
+- Set up virtual environment and dependencies
+- Copy application to `/opt/yggsec-home`
+- Configure systemd services
+- Set up firewall protection
+- Start the application
+
+**Access**: `http://device-ip:5000` or `http://yggsec-home.local:5000`
 
 ### 🏠 Production Setup (DietPi)
 
@@ -290,22 +295,29 @@ htop
 ## Development
 
 ### Local Development Setup
+
+For development (non-production) purposes:
+
 ```bash
 # Clone repository
 git clone https://github.com/romarroca/yggsec-home.git
 cd yggsec-home
 
-# One-command initialization
-./init.sh
+# Manual development setup
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Create directories
+mkdir -p logs uploads
 
 # Start development server
-./run.sh
-
-# Alternative manual start:
-source venv/bin/activate
 export FLASK_ENV=development
+export SECRET_KEY=dev-key
 python app.py
 ```
+
+**Note**: For production deployment, use `sudo ./init.sh` instead, which handles complete system installation.
 
 ### Testing on VMware
 1. Install DietPi in VMware VM
