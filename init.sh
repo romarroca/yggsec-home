@@ -124,71 +124,67 @@ install_system_packages() {
     ESSENTIAL_PACKAGES=""
     NETWORK_PACKAGES=""
 
-    # MINIMAL packages - only what's absolutely necessary for the GUI
-    MINIMAL_PACKAGES=""
+    # Essential packages for application functionality
+    ESSENTIAL_PACKAGES="systemd rsync curl"  # rsync for file copying, curl for AdGuard installer
 
-    # Python (only if not installed)
+    # Python packages (install if not present)
     if [[ "$PYTHON_INSTALLED" != true ]]; then
-        log_info "Installing minimal Python stack..."
-        MINIMAL_PACKAGES="python3 python3-pip python3-venv"
+        log_info "Installing Python stack..."
+        ESSENTIAL_PACKAGES="$ESSENTIAL_PACKAGES python3 python3-pip python3-venv"
     else
-        log_info "Python already installed, skipping"
-        # Only add pip if missing
+        log_info "Python already installed, checking for pip/venv..."
+        # Still install pip and venv if missing
         if ! command -v pip3 &> /dev/null; then
-            MINIMAL_PACKAGES="python3-pip"
+            ESSENTIAL_PACKAGES="$ESSENTIAL_PACKAGES python3-pip"
+        fi
+        # Check for venv module
+        if ! python3 -m venv --help &> /dev/null; then
+            ESSENTIAL_PACKAGES="$ESSENTIAL_PACKAGES python3-venv"
         fi
     fi
 
-    # Essential tools (only what we actually use)
-    ESSENTIAL_PACKAGES="systemd"  # For service management
+    # Network management tools
+    NETWORK_PACKAGES="iproute2 net-tools"  # For network configuration
 
-    # Network tools (only if WireGuard not installed)
-    NETWORK_PACKAGES=""
+    # WireGuard (install if not present)
     if [[ "$WG_INSTALLED" != true ]]; then
         log_info "Installing WireGuard tools..."
-        NETWORK_PACKAGES="wireguard-tools"
+        NETWORK_PACKAGES="$NETWORK_PACKAGES wireguard-tools"
     else
         log_info "WireGuard already installed, skipping"
     fi
 
-    # Optional network management tools (only if needed)
-    if [[ "$IS_DIETPI" != true ]]; then
-        # Only install on non-DietPi systems that might need these
-        NETWORK_PACKAGES="$NETWORK_PACKAGES iproute2"
-    fi
+    # Optional but useful tools
+    OPTIONAL_PACKAGES="wget"  # For downloading configs if needed
 
     # Install packages with error handling (temporarily disable strict error checking)
     set +e
 
-    # Install minimal Python packages
-    if [[ -n "$MINIMAL_PACKAGES" ]]; then
-        log_info "Installing minimal Python packages: $MINIMAL_PACKAGES"
-        apt install -y $MINIMAL_PACKAGES
-        if [[ $? -ne 0 ]]; then
-            log_warning "Some Python packages failed to install, continuing..."
-        fi
-    else
-        log_info "No additional Python packages needed"
-    fi
-
     # Install essential system packages
     if [[ -n "$ESSENTIAL_PACKAGES" ]]; then
-        log_info "Installing essential system packages: $ESSENTIAL_PACKAGES"
+        log_info "Installing essential packages: $ESSENTIAL_PACKAGES"
         apt install -y $ESSENTIAL_PACKAGES
         if [[ $? -ne 0 ]]; then
             log_warning "Some essential packages failed to install, continuing..."
         fi
     fi
 
-    # Install network packages only if needed
+    # Install network packages
     if [[ -n "$NETWORK_PACKAGES" ]]; then
         log_info "Installing network tools: $NETWORK_PACKAGES"
         apt install -y $NETWORK_PACKAGES
         if [[ $? -ne 0 ]]; then
             log_warning "Some network packages failed to install, continuing..."
         fi
-    else
-        log_info "No additional network packages needed"
+    fi
+
+    # Install optional packages
+    if [[ -n "$OPTIONAL_PACKAGES" ]]; then
+        log_info "Installing optional tools: $OPTIONAL_PACKAGES"
+        apt install -y $OPTIONAL_PACKAGES
+        if [[ $? -ne 0 ]]; then
+            log_warning "Some optional packages failed to install, continuing..."
+        fi
     fi
 
     # Re-enable strict error checking
