@@ -1,0 +1,17 @@
+[Unit]
+Description=YggSec-Home Firewall Rules
+Documentation=https://github.com/romarroca/yggsec-home
+After=network.target
+Before=yggsec-home.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/yggsec-home/scripts/setup-firewall.sh
+ExecStop=/opt/yggsec-home/scripts/cleanup-firewall.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=yggsec-home-firewall
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,466 @@
+// YggSec-Home JavaScript
+
+// Theme management
+function toggleTheme() {
+    const html = document.documentElement;
+    const themeIcon = document.getElementById('theme-icon');
+
+    if (html.getAttribute('data-bs-theme') === 'light') {
+        html.setAttribute('data-bs-theme', 'dark');
+        themeIcon.className = 'bi bi-sun-fill';
+        localStorage.setItem('theme', 'dark');
+    } else {
+        html.setAttribute('data-bs-theme', 'light');
+        themeIcon.className = 'bi bi-moon-fill';
+        localStorage.setItem('theme', 'light');
+    }
+}
+
+// Initialize theme on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    const html = document.documentElement;
+    const themeIcon = document.getElementById('theme-icon');
+
+    html.setAttribute('data-bs-theme', savedTheme);
+    themeIcon.className = savedTheme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
+
+    // Auto-refresh dashboard every 30 seconds
+    if (window.location.pathname === '/') {
+        setInterval(refreshDashboard, 30000);
+    }
+});
+
+// Network Management
+function showNetworkModal() {
+    // Load current network configuration
+    fetch('/api/network/status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.config) {
+                const config = data.config;
+                document.getElementById('networkMode').value = config.mode || 'dhcp';
+
+                if (config.mode === 'static') {
+                    document.getElementById('ipAddress').value = config.ip || '';
+                    document.getElementById('netmask').value = config.netmask || '';
+                    document.getElementById('gateway').value = config.gateway || '';
+                    document.getElementById('dnsServers').value = config.dns ? config.dns.join(', ') : '';
+                }
+
+                toggleNetworkFields();
+            }
+        })
+        .catch(error => {
+            console.error('Error loading network config:', error);
+            showAlert('Failed to load network configuration', 'danger');
+        });
+
+    const modal = new bootstrap.Modal(document.getElementById('networkModal'));
+    modal.show();
+}
+
+function toggleNetworkFields() {
+    const mode = document.getElementById('networkMode').value;
+    const staticFields = document.getElementById('staticFields');
+
+    if (mode === 'static') {
+        staticFields.style.display = 'block';
+    } else {
+        staticFields.style.display = 'none';
+    }
+}
+
+// Handle network configuration form submission
+document.addEventListener('DOMContentLoaded', function() {
+    const networkForm = document.getElementById('networkForm');
+    if (networkForm) {
+        networkForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const mode = document.getElementById('networkMode').value;
+            const data = { mode: mode };
+
+            if (mode === 'static') {
+                data.ip_address = document.getElementById('ipAddress').value.trim();
+                data.netmask = document.getElementById('netmask').value.trim();
+                data.gateway = document.getElementById('gateway').value.trim();
+                data.dns_servers = document.getElementById('dnsServers').value
+                    .split(',')
+                    .map(dns => dns.trim())
+                    .filter(dns => dns.length > 0);
+
+                // Basic validation
+                if (!data.ip_address || !data.netmask || !data.gateway) {
+                    showAlert('Please fill in all required fields', 'danger');
+                    return;
+                }
+            }
+
+            // Show loading state
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Applying...';
+
+            fetch('/api/network/configure', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    bootstrap.Modal.getInstance(document.getElementById('networkModal')).hide();
+                    setTimeout(refreshDashboard, 2000);
+                } else {
+                    showAlert(data.error, 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('Network configuration failed', 'danger');
+            })
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            });
+        });
+    }
+});
+
+// AdGuard Management
+function adguardControl(action) {
+    const data = { action: action };
+
+    fetch('/api/adguard/control', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+            setTimeout(refreshDashboard, 1000);
+        } else {
+            showAlert(data.message || 'AdGuard operation failed', 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('AdGuard operation failed', 'danger');
+    });
+}
+
+// WireGuard Management
+function showWireguardModal() {
+    const modal = new bootstrap.Modal(document.getElementById('wireguardModal'));
+    modal.show();
+}
+
+function wireguardControl(action) {
+    const data = { action: action };
+
+    fetch('/api/wireguard/control', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+            setTimeout(refreshDashboard, 1000);
+        } else {
+            showAlert(data.message || 'WireGuard operation failed', 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('WireGuard operation failed', 'danger');
+    });
+}
+
+// Handle WireGuard file upload
+document.addEventListener('DOMContentLoaded', function() {
+    const wireguardForm = document.getElementById('wireguardForm');
+    if (wireguardForm) {
+        wireguardForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const fileInput = document.getElementById('configFile');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                showAlert('Please select a configuration file', 'danger');
+                return;
+            }
+
+            if (!file.name.toLowerCase().endsWith('.conf')) {
+                showAlert('Only .conf files are allowed', 'danger');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('config_file', file);
+
+            // Show loading state
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Uploading...';
+
+            fetch('/api/wireguard/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    bootstrap.Modal.getInstance(document.getElementById('wireguardModal')).hide();
+                    fileInput.value = '';
+                    setTimeout(refreshDashboard, 1000);
+                } else {
+                    showAlert(data.message || 'Upload failed', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('Upload failed', 'danger');
+            })
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            });
+        });
+    }
+});
+
+// Password Management
+function showPasswordModal() {
+    const modal = new bootstrap.Modal(document.getElementById('passwordModal'));
+    modal.show();
+}
+
+function generatePassword() {
+    fetch('/api/system/generate-password')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('newPassword').value = data.password;
+                document.getElementById('confirmPassword').value = data.password;
+            } else {
+                showAlert('Failed to generate password', 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('Failed to generate password', 'danger');
+        });
+}
+
+// Handle password change form
+document.addEventListener('DOMContentLoaded', function() {
+    const passwordForm = document.getElementById('passwordForm');
+    if (passwordForm) {
+        passwordForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+
+            if (newPassword !== confirmPassword) {
+                showAlert('Passwords do not match', 'danger');
+                return;
+            }
+
+            if (newPassword.length < 8) {
+                showAlert('Password must be at least 8 characters long', 'danger');
+                return;
+            }
+
+            const data = { new_password: newPassword };
+
+            // Show loading state
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Changing...';
+
+            fetch('/api/system/password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    bootstrap.Modal.getInstance(document.getElementById('passwordModal')).hide();
+                    document.getElementById('newPassword').value = '';
+                    document.getElementById('confirmPassword').value = '';
+                } else {
+                    showAlert(data.message || 'Password change failed', 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('Password change failed', 'danger');
+            })
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            });
+        });
+    }
+});
+
+// System Management
+function systemAction(action) {
+    let confirmMessage = '';
+
+    switch(action) {
+        case 'reboot':
+            confirmMessage = 'Are you sure you want to reboot the system? This will temporarily interrupt all services.';
+            break;
+        case 'shutdown':
+            confirmMessage = 'Are you sure you want to shutdown the system? You will need physical access to turn it back on.';
+            break;
+        case 'update':
+            confirmMessage = 'Are you sure you want to update the system? This may take several minutes.';
+            break;
+        default:
+            return;
+    }
+
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+
+    const data = { action: action };
+
+    fetch('/api/system/control', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+
+            if (action === 'reboot' || action === 'shutdown') {
+                showAlert('System ' + action + ' initiated. You will lose connection shortly.', 'warning');
+            }
+        } else {
+            showAlert(data.message || 'System operation failed', 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('System operation failed', 'danger');
+    });
+}
+
+// Utility Functions
+function showAlert(message, type = 'info') {
+    // Remove existing alerts
+    const existingAlerts = document.querySelectorAll('.alert-custom');
+    existingAlerts.forEach(alert => alert.remove());
+
+    // Create new alert
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show alert-custom`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+    // Insert at the top of main content
+    const main = document.querySelector('main');
+    main.insertBefore(alertDiv, main.firstChild);
+
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            bootstrap.Alert.getOrCreateInstance(alertDiv).close();
+        }
+    }, 5000);
+}
+
+function refreshDashboard() {
+    // Only refresh if we're on the dashboard page
+    if (window.location.pathname === '/') {
+        window.location.reload();
+    }
+}
+
+// Loading state management
+function setLoadingState(element, loading = true) {
+    if (loading) {
+        element.disabled = true;
+        element.classList.add('loading');
+        const originalText = element.textContent;
+        element.dataset.originalText = originalText;
+        element.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>' + originalText;
+    } else {
+        element.disabled = false;
+        element.classList.remove('loading');
+        element.textContent = element.dataset.originalText || element.textContent;
+    }
+}
+
+// Auto-refresh status indicators
+function updateStatusIndicators() {
+    // Update network status
+    fetch('/api/network/status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update network status display
+                console.log('Network status updated');
+            }
+        })
+        .catch(error => console.error('Network status update failed:', error));
+
+    // Update AdGuard status
+    fetch('/api/adguard/status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update AdGuard status display
+                console.log('AdGuard status updated');
+            }
+        })
+        .catch(error => console.error('AdGuard status update failed:', error));
+
+    // Update WireGuard status
+    fetch('/api/wireguard/status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update WireGuard status display
+                console.log('WireGuard status updated');
+            }
+        })
+        .catch(error => console.error('WireGuard status update failed:', error));
+}
+
+// Initialize auto-refresh for status indicators
+document.addEventListener('DOMContentLoaded', function() {
+    // Refresh status every 10 seconds
+    setInterval(updateStatusIndicators, 10000);
+});
