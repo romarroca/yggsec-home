@@ -322,13 +322,44 @@ configure_systemd_services() {
     # Generate random secret key
     SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
 
-    # Update service file with secret key and correct paths
-    sed -i "s|SECRET_KEY=change-this-in-production|SECRET_KEY=$SECRET_KEY|" systemd/yggsec-home.service
-    sed -i "s|WorkingDirectory=/opt/yggsec-home|WorkingDirectory=$INSTALL_DIR|" systemd/yggsec-home.service
-    sed -i "s|ExecStart=/opt/yggsec-home/venv/bin/python app.py|ExecStart=$INSTALL_DIR/venv/bin/python app.py|" systemd/yggsec-home.service
+    # Create DietPi-compatible service file
+    log_info "Creating DietPi-compatible service file..."
+    cat > /etc/systemd/system/yggsec-home.service << EOF
+[Unit]
+Description=YggSec-Home Parental Control Web Interface
+Documentation=https://github.com/romarroca/yggsec-home
+After=network.target
+Wants=network.target
 
-    # Install service files
-    cp systemd/yggsec-home.service /etc/systemd/system/
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=$INSTALL_DIR
+Environment=PYTHONPATH=$INSTALL_DIR
+Environment=FLASK_APP=app.py
+Environment=FLASK_ENV=production
+Environment=SECRET_KEY=$SECRET_KEY
+ExecStart=$INSTALL_DIR/venv/bin/python app.py
+ExecReload=/bin/kill -HUP \$MAINPID
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=yggsec-home
+
+# Basic security settings (compatible with DietPi)
+NoNewPrivileges=yes
+
+# Resource limits
+LimitNOFILE=1024
+LimitNPROC=512
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Install firewall service
     cp systemd/yggsec-home-firewall.service /etc/systemd/system/
 
     # Update firewall service paths
@@ -340,7 +371,13 @@ configure_systemd_services() {
     # Reload systemd
     systemctl daemon-reload
 
-    log_success "Systemd services configured"
+    log_success "DietPi-compatible systemd services configured"
+
+    # Additional DietPi-specific logging
+    if [[ "$IS_DIETPI" == true ]]; then
+        log_info "Service configured with DietPi-compatible security settings"
+        log_info "Removed strict filesystem protection for better compatibility"
+    fi
 }
 
 setup_firewall() {
