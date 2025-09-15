@@ -1,10 +1,9 @@
 import subprocess
 import logging
 import os
-import pwd
-import crypt
 import secrets
 import string
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -152,11 +151,7 @@ class SystemManager:
             if not any(c.isdigit() for c in new_password):
                 return False, "Password must contain at least one digit"
 
-            # Generate salt and hash password
-            salt = crypt.mksalt(crypt.METHOD_SHA512)
-            hashed_password = crypt.crypt(new_password, salt)
-
-            # Change password using chpasswd
+            # Change password using chpasswd (simpler approach, compatible with Python 3.13+)
             chpasswd_input = f"{self.admin_user}:{new_password}"
             result = subprocess.run(['chpasswd'],
                                   input=chpasswd_input,
