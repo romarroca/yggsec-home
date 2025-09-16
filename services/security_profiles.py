@@ -48,8 +48,9 @@ class SecurityProfileManager:
         try:
             # Get current AdGuard filters
             localhost_url = self.adguard._get_base_url(use_ip=False)
+            auth = self.adguard._get_auth()
             logger.info(f"Trying to connect to AdGuard at: {localhost_url}")
-            response = requests.get(f'{localhost_url}/control/filtering/status', timeout=5)
+            response = requests.get(f'{localhost_url}/control/filtering/status', timeout=5, auth=auth)
 
             logger.info(f"AdGuard filtering status response: {response.status_code}")
             if response.status_code != 200:
@@ -184,8 +185,9 @@ class SecurityProfileManager:
             localhost_url = self.adguard._get_base_url(use_ip=False)
             logger.info(f"Checking AdGuard accessibility at: {localhost_url}")
 
-            # Try to get basic status - this should work without auth
-            response = requests.get(f'{localhost_url}/control/status', timeout=5)
+            # Try to get basic status - using auth if available
+            auth = self.adguard._get_auth()
+            response = requests.get(f'{localhost_url}/control/status', timeout=5, auth=auth)
             logger.info(f"AdGuard status check response: {response.status_code}")
 
             if response.status_code == 200:
@@ -208,9 +210,10 @@ class SecurityProfileManager:
         """Disable all currently enabled filters."""
         try:
             localhost_url = self.adguard._get_base_url(use_ip=False)
+            auth = self.adguard._get_auth()
 
             # Get current filters
-            response = requests.get(f'{localhost_url}/control/filtering/status', timeout=5)
+            response = requests.get(f'{localhost_url}/control/filtering/status', timeout=5, auth=auth)
             if response.status_code != 200:
                 return False, "Could not get current filter status"
 
@@ -226,7 +229,8 @@ class SecurityProfileManager:
                     response = requests.post(
                         f'{localhost_url}/control/filtering/set_url',
                         json=filter_data,
-                        timeout=5
+                        timeout=5,
+                        auth=auth
                     )
                     if response.status_code != 200:
                         logger.warning(f"Failed to disable filter: {filter_item.get('name', 'Unknown')}")
@@ -241,6 +245,7 @@ class SecurityProfileManager:
         """Enable all filters required for the specified mode."""
         try:
             localhost_url = self.adguard._get_base_url(use_ip=False)
+            auth = self.adguard._get_auth()
             filters = self._get_all_filters_for_mode(mode)
 
             enabled_count = 0
@@ -266,7 +271,8 @@ class SecurityProfileManager:
                 response = requests.post(
                     f'{localhost_url}/control/filtering/add_url',
                     json=filter_data,
-                    timeout=10
+                    timeout=10,
+                    auth=auth
                 )
 
                 if response.status_code == 200:
@@ -289,13 +295,15 @@ class SecurityProfileManager:
         """Enable AdGuard's built-in adult content filtering."""
         try:
             localhost_url = self.adguard._get_base_url(use_ip=False)
+            auth = self.adguard._get_auth()
 
             # Enable parental control
             parental_data = {'enabled': True}
             response = requests.post(
                 f'{localhost_url}/control/parental/enable',
                 json=parental_data,
-                timeout=5
+                timeout=5,
+                auth=auth
             )
 
             if response.status_code == 200:
@@ -310,7 +318,8 @@ class SecurityProfileManager:
         """Reload AdGuard Home configuration."""
         try:
             localhost_url = self.adguard._get_base_url(use_ip=False)
-            response = requests.post(f'{localhost_url}/control/filtering/refresh', timeout=10)
+            auth = self.adguard._get_auth()
+            response = requests.post(f'{localhost_url}/control/filtering/refresh', timeout=10, auth=auth)
 
             if response.status_code == 200:
                 logger.info("AdGuard configuration reloaded")

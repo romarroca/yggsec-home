@@ -8,10 +8,12 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 class AdGuardManager:
-    def __init__(self, port=3000):
+    def __init__(self, port=3000, username=None, password=None):
         self.port = port
         self.service_name = 'AdGuardHome'
         self.config_path = '/opt/AdGuardHome/AdGuardHome.yaml'
+        self.username = username
+        self.password = password
 
     def _get_local_ip(self):
         """Get the local IP address of the machine"""
@@ -31,6 +33,12 @@ class AdGuardManager:
             ip = self._get_local_ip()
             return f'http://{ip}:{self.port}'
         return f'http://localhost:{self.port}'
+
+    def _get_auth(self):
+        """Get authentication tuple for requests if credentials are provided"""
+        if self.username and self.password:
+            return (self.username, self.password)
+        return None
 
     def get_service_status(self):
         try:

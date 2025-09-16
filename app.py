@@ -74,7 +74,7 @@ def create_app():
 
     # Initialize service managers
     network_mgr = NetworkManager(Config.NETWORK_INTERFACE)
-    adguard_mgr = AdGuardManager(Config.ADGUARD_PORT)
+    adguard_mgr = AdGuardManager(Config.ADGUARD_PORT, Config.ADGUARD_USERNAME, Config.ADGUARD_PASSWORD)
     wireguard_mgr = WireGuardManager(Config.WG_INTERFACE, Config.WG_CONF_DIR)
     system_mgr = SystemManager()
     security_mgr = SecurityProfileManager(adguard_mgr)

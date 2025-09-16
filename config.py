@@ -22,6 +22,8 @@ class Config:
     # AdGuard Home
     ADGUARD_PORT = 3000
     ADGUARD_CONFIG = '/opt/AdGuardHome/AdGuardHome.yaml'
+    ADGUARD_USERNAME = os.environ.get('ADMIN_USERNAME', 'yggsec')
+    ADGUARD_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'defaultpass')
 
     # Upload restrictions
     MAX_CONTENT_LENGTH = 16 * 1024  # 16KB max for .conf files
