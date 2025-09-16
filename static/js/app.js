@@ -145,6 +145,10 @@ function adguardControl(action) {
     .then(data => {
         if (data.success) {
             showAlert(data.message, 'success');
+            // Refresh page to show updated status
+            setTimeout(() => {
+                location.reload();
+            }, 1500);
         } else {
             showAlert(data.message || 'AdGuard operation failed', 'danger');
         }

@@ -52,20 +52,27 @@
                             </p>
                         </div>
                         <div class="setting-actions">
-                            {% if adguard and adguard.active %}
-                                <button class="btn btn-outline-danger me-2" onclick="adguardControl('stop')">
-                                    Stop
+                            <div class="dropdown">
+                                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                    <i class="bi bi-three-dots"></i>
                                 </button>
-                            {% else %}
-                                <button class="btn btn-outline-success me-2" onclick="adguardControl('start')">
-                                    Start
-                                </button>
-                            {% endif %}
-                            {% if adguard and adguard.dashboard_url %}
-                                <a href="{{ adguard.dashboard_url }}" target="_blank" class="btn btn-outline-primary">
-                                    Dashboard <i class="bi bi-box-arrow-up-right"></i>
-                                </a>
-                            {% endif %}
+                                <ul class="dropdown-menu">
+                                    {% if adguard and adguard.active %}
+                                        <li><a class="dropdown-item" href="#" onclick="adguardControl('stop')">
+                                            <i class="bi bi-stop-circle text-danger me-2"></i>Stop Service
+                                        </a></li>
+                                    {% else %}
+                                        <li><a class="dropdown-item" href="#" onclick="adguardControl('start')">
+                                            <i class="bi bi-play-circle text-success me-2"></i>Start Service
+                                        </a></li>
+                                    {% endif %}
+                                    {% if adguard and adguard.dashboard_url %}
+                                        <li><a class="dropdown-item" href="{{ adguard.dashboard_url }}" target="_blank">
+                                            <i class="bi bi-box-arrow-up-right text-primary me-2"></i>Open Dashboard
+                                        </a></li>
+                                    {% endif %}
+                                </ul>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -108,21 +115,28 @@
                         </div>
                         <div class="setting-actions">
                             {% if wireguard and wireguard.config_exists %}
-                                {% if wireguard.connected %}
-                                    <button class="btn btn-outline-danger me-2" onclick="wireguardControl('stop')">
-                                        Disconnect
+                                <div class="dropdown">
+                                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                        <i class="bi bi-three-dots"></i>
                                     </button>
-                                {% else %}
-                                    <button class="btn btn-outline-success me-2" onclick="wireguardControl('start')">
-                                        Connect
-                                    </button>
-                                {% endif %}
-                                <button class="btn btn-outline-secondary me-2" onclick="showWireguardEditModal()">
-                                    Edit
-                                </button>
-                                <button class="btn btn-outline-primary" onclick="showWireguardModal()">
-                                    Upload Config
-                                </button>
+                                    <ul class="dropdown-menu">
+                                        {% if wireguard.connected %}
+                                            <li><a class="dropdown-item" href="#" onclick="wireguardControl('stop')">
+                                                <i class="bi bi-stop-circle text-danger me-2"></i>Disconnect
+                                            </a></li>
+                                        {% else %}
+                                            <li><a class="dropdown-item" href="#" onclick="wireguardControl('start')">
+                                                <i class="bi bi-play-circle text-success me-2"></i>Connect
+                                            </a></li>
+                                        {% endif %}
+                                        <li><a class="dropdown-item" href="#" onclick="showWireguardEditModal()">
+                                            <i class="bi bi-pencil text-secondary me-2"></i>Edit Configuration
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="showWireguardModal()">
+                                            <i class="bi bi-upload text-primary me-2"></i>Upload New Config
+                                        </a></li>
+                                    </ul>
+                                </div>
                             {% else %}
                                 <button class="btn btn-outline-primary" onclick="showWireguardModal()">
                                     Upload Config <i class="bi bi-chevron-right"></i>
@@ -149,12 +163,20 @@
                             </p>
                         </div>
                         <div class="setting-actions">
-                            <button class="btn btn-outline-primary me-2" onclick="systemAction('update')">
-                                Update
-                            </button>
-                            <button class="btn btn-outline-warning" onclick="systemAction('reboot')">
-                                Reboot
-                            </button>
+                            <div class="dropdown">
+                                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                    <i class="bi bi-three-dots"></i>
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" href="#" onclick="systemAction('update')">
+                                        <i class="bi bi-arrow-up-circle text-primary me-2"></i>Update System
+                                    </a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="#" onclick="systemAction('reboot')">
+                                        <i class="bi bi-arrow-clockwise text-warning me-2"></i>Reboot System
+                                    </a></li>
+                                </ul>
+                            </div>
                         </div>
                     </div>
                 </div>
