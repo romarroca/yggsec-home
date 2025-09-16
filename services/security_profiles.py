@@ -48,10 +48,12 @@ class SecurityProfileManager:
         try:
             # Get current AdGuard filters
             localhost_url = self.adguard._get_base_url(use_ip=False)
+            logger.info(f"Trying to connect to AdGuard at: {localhost_url}")
             response = requests.get(f'{localhost_url}/control/filtering/status', timeout=5)
 
+            logger.info(f"AdGuard filtering status response: {response.status_code}")
             if response.status_code != 200:
-                logger.warning("Could not get filtering status, defaulting to balanced")
+                logger.warning(f"Could not get filtering status: {response.status_code} - {response.text}")
                 return 'balanced'
 
             current_filters = response.json().get('filters', [])
@@ -169,7 +171,7 @@ class SecurityProfileManager:
             return True, f"Security mode set to {mode.title()}"
 
         except Exception as e:
-            logger.error(f"Failed to set security mode {mode}: {e}")
+            logger.error(f"Failed to set security mode {mode}: {e}", exc_info=True)
             return False, f"Failed to set security mode: {str(e)}"
 
     def _disable_all_filters(self) -> Tuple[bool, str]:
