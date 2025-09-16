@@ -18,6 +18,7 @@ from services.network import NetworkManager
 from services.adguard import AdGuardManager
 from services.wireguard import WireGuardManager
 from services.system import SystemManager
+from services.security_profiles import SecurityProfileManager
 
 def create_app():
     app = Flask(__name__)
@@ -76,6 +77,7 @@ def create_app():
     adguard_mgr = AdGuardManager(Config.ADGUARD_PORT)
     wireguard_mgr = WireGuardManager(Config.WG_INTERFACE, Config.WG_CONF_DIR)
     system_mgr = SystemManager()
+    security_mgr = SecurityProfileManager(adguard_mgr)
 
     # Default admin credentials (configured during installation)
     DEFAULT_USERNAME = os.environ.get('ADMIN_USERNAME', 'yggsec')
@@ -356,6 +358,67 @@ def create_app():
             })
         except Exception as e:
             app.logger.error(f"AdGuard query log error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    # Security Profile Routes
+    @app.route('/api/security/modes')
+    def get_security_modes():
+        """Get all available security modes"""
+        try:
+            modes = security_mgr.get_available_modes()
+            current_mode = security_mgr.get_current_mode()
+
+            return jsonify({
+                'success': True,
+                'modes': modes,
+                'current_mode': current_mode
+            })
+        except Exception as e:
+            app.logger.error(f"Security modes error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/security/mode', methods=['POST'])
+    @login_required
+    @limiter.limit("3 per minute")
+    def set_security_mode():
+        """Set the security mode"""
+        try:
+            data = request.get_json()
+            mode = data.get('mode')
+
+            if not mode:
+                return jsonify({'success': False, 'error': 'Mode is required'}), 400
+
+            if mode not in ['light', 'balanced', 'maximum']:
+                return jsonify({'success': False, 'error': 'Invalid mode'}), 400
+
+            success, message = security_mgr.set_security_mode(mode)
+
+            return jsonify({
+                'success': success,
+                'message': message,
+                'current_mode': security_mgr.get_current_mode()
+            })
+
+        except Exception as e:
+            app.logger.error(f"Set security mode error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/security/mode/<mode>/summary')
+    def get_mode_summary(mode):
+        """Get detailed summary of a security mode"""
+        try:
+            summary = security_mgr.get_mode_summary(mode)
+
+            if summary is None:
+                return jsonify({'success': False, 'error': 'Invalid mode'}), 400
+
+            return jsonify({
+                'success': True,
+                'summary': summary
+            })
+        except Exception as e:
+            app.logger.error(f"Mode summary error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
 
     # WireGuard Routes

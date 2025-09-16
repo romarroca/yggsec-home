@@ -103,6 +103,23 @@
         </div>
     </div>
 
+    <!-- Security Mode -->
+    <div class="card">
+        <div class="card-body">
+            <div class="status-icon text-success">
+                <i class="bi bi-shield-check"></i>
+            </div>
+            <h5 class="card-title">Security Mode</h5>
+            <p class="text-muted mb-2" id="security-mode-description">Loading...</p>
+            <span class="badge" id="security-mode-badge">LOADING</span>
+            <div class="mt-3">
+                <button class="btn btn-outline-primary btn-sm" onclick="showSecurityModeModal()">
+                    Configure
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- System -->
     <div class="card">
         <div class="card-body">
@@ -238,6 +255,92 @@
     </div>
 </div>
 
+<!-- Security Mode Configuration Modal -->
+<div class="modal fade" id="securityModeModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Security Mode Configuration</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-4">
+                    <p class="text-muted">Choose your security level. Higher levels provide more protection but may block legitimate content.</p>
+                </div>
+
+                <div class="row">
+                    <!-- Light Mode -->
+                    <div class="col-md-4 mb-3">
+                        <div class="card security-mode-option" data-mode="light">
+                            <div class="card-body text-center">
+                                <div class="security-mode-icon text-primary mb-2">
+                                    <i class="bi bi-shield" style="font-size: 2rem;"></i>
+                                </div>
+                                <h5 class="card-title">Light</h5>
+                                <p class="card-text text-muted">Ads/trackers only. Minimal breakage.</p>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="securityMode" id="lightMode" value="light">
+                                    <label class="form-check-label" for="lightMode">Select</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Balanced Mode -->
+                    <div class="col-md-4 mb-3">
+                        <div class="card security-mode-option" data-mode="balanced">
+                            <div class="card-body text-center">
+                                <div class="security-mode-icon text-success mb-2">
+                                    <i class="bi bi-shield-check" style="font-size: 2rem;"></i>
+                                </div>
+                                <h5 class="card-title">Balanced <span class="badge bg-success">Recommended</span></h5>
+                                <p class="card-text text-muted">Ads/trackers + common malware/phishing. Recommended.</p>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="securityMode" id="balancedMode" value="balanced" checked>
+                                    <label class="form-check-label" for="balancedMode">Select</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Maximum Mode -->
+                    <div class="col-md-4 mb-3">
+                        <div class="card security-mode-option" data-mode="maximum">
+                            <div class="card-body text-center">
+                                <div class="security-mode-icon text-danger mb-2">
+                                    <i class="bi bi-shield-fill" style="font-size: 2rem;"></i>
+                                </div>
+                                <h5 class="card-title">Maximum</h5>
+                                <p class="card-text text-muted">Aggressive blocking incl. malware/phishing/scam/adult.</p>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="securityMode" id="maximumMode" value="maximum">
+                                    <label class="form-check-label" for="maximumMode">Select</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mode Details -->
+                <div id="mode-details" class="mt-4">
+                    <h6>Filter Lists Included:</h6>
+                    <div id="filter-list" class="text-muted">
+                        <small>Select a security mode to see details...</small>
+                    </div>
+                </div>
+
+                <div class="alert alert-info mt-3">
+                    <strong>Note:</strong> Changing security modes will update your AdGuard filters. This may take a moment to complete.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="applySecurityMode">Apply Configuration</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Password Change Modal -->
 <div class="modal fade" id="passwordModal" tabindex="-1">
     <div class="modal-dialog">
@@ -271,4 +374,231 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Security Mode Management
+let availableModes = {};
+
+function loadSecurityModeStatus() {
+    fetch('/api/security/modes')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                availableModes = data.modes;
+                const currentMode = data.current_mode || 'balanced';
+
+                // Update dashboard card
+                updateSecurityModeCard(currentMode);
+
+                // Update modal selection
+                updateSecurityModeModal(currentMode);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading security mode status:', error);
+            updateSecurityModeCard('balanced', true);
+        });
+}
+
+function updateSecurityModeCard(mode, isError = false) {
+    const descriptionEl = document.getElementById('security-mode-description');
+    const badgeEl = document.getElementById('security-mode-badge');
+
+    if (isError) {
+        descriptionEl.textContent = 'Unable to load status';
+        badgeEl.textContent = 'ERROR';
+        badgeEl.className = 'badge bg-danger';
+        return;
+    }
+
+    const modeInfo = availableModes[mode];
+    if (modeInfo) {
+        descriptionEl.textContent = modeInfo.description;
+        badgeEl.textContent = mode.toUpperCase();
+
+        // Set badge color based on mode
+        let badgeClass = 'badge ';
+        switch(mode) {
+            case 'light':
+                badgeClass += 'bg-primary';
+                break;
+            case 'balanced':
+                badgeClass += 'bg-success';
+                break;
+            case 'maximum':
+                badgeClass += 'bg-danger';
+                break;
+            default:
+                badgeClass += 'bg-secondary';
+        }
+        badgeEl.className = badgeClass;
+    }
+}
+
+function updateSecurityModeModal(currentMode) {
+    // Select the current mode radio button
+    const radioButton = document.querySelector(`input[value="${currentMode}"]`);
+    if (radioButton) {
+        radioButton.checked = true;
+        showModeDetails(currentMode);
+    }
+}
+
+function showSecurityModeModal() {
+    loadSecurityModeStatus();
+    const modal = new bootstrap.Modal(document.getElementById('securityModeModal'));
+    modal.show();
+}
+
+function showModeDetails(mode) {
+    const filterListEl = document.getElementById('filter-list');
+    const modeInfo = availableModes[mode];
+
+    if (!modeInfo || !modeInfo.filters) {
+        filterListEl.innerHTML = '<small class="text-muted">No filter details available</small>';
+        return;
+    }
+
+    // Group filters by category
+    const categories = {};
+    modeInfo.filters.forEach(filter => {
+        const category = filter.category || 'other';
+        if (!categories[category]) {
+            categories[category] = [];
+        }
+        categories[category].push(filter.name);
+    });
+
+    let html = '';
+    Object.entries(categories).forEach(([category, filters]) => {
+        html += `<div class="mb-2">`;
+        html += `<strong class="text-capitalize">${category}:</strong><br>`;
+        filters.forEach(filterName => {
+            html += `<small class="text-muted me-3">• ${filterName}</small><br>`;
+        });
+        html += `</div>`;
+    });
+
+    // Add adult content info for maximum mode
+    if (mode === 'maximum' && modeInfo.adult_content_enabled) {
+        html += `<div class="mb-2">`;
+        html += `<strong class="text-warning">Adult Content:</strong><br>`;
+        html += `<small class="text-muted">• Adult content filtering enabled</small>`;
+        html += `</div>`;
+    }
+
+    filterListEl.innerHTML = html;
+}
+
+function applySecurityMode() {
+    const selectedMode = document.querySelector('input[name="securityMode"]:checked')?.value;
+    if (!selectedMode) {
+        showAlert('Please select a security mode', 'warning');
+        return;
+    }
+
+    const applyButton = document.getElementById('applySecurityMode');
+    applyButton.disabled = true;
+    applyButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Applying...';
+
+    fetch('/api/security/mode', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ mode: selectedMode })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(data.message, 'success');
+
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('securityModeModal'));
+            modal.hide();
+
+            // Refresh dashboard status
+            setTimeout(() => {
+                loadSecurityModeStatus();
+            }, 1000);
+        } else {
+            showAlert(data.error || 'Failed to apply security mode', 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error applying security mode:', error);
+        showAlert('Network error occurred', 'danger');
+    })
+    .finally(() => {
+        applyButton.disabled = false;
+        applyButton.innerHTML = 'Apply Configuration';
+    });
+}
+
+// Event listeners for security mode modal
+document.addEventListener('DOMContentLoaded', function() {
+    // Load initial security mode status
+    loadSecurityModeStatus();
+
+    // Radio button change handler
+    document.querySelectorAll('input[name="securityMode"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.checked) {
+                showModeDetails(this.value);
+            }
+        });
+    });
+
+    // Apply button handler
+    document.getElementById('applySecurityMode').addEventListener('click', applySecurityMode);
+
+    // Security mode card click handlers
+    document.querySelectorAll('.security-mode-option').forEach(card => {
+        card.addEventListener('click', function() {
+            const mode = this.dataset.mode;
+            const radio = document.querySelector(`input[value="${mode}"]`);
+            if (radio) {
+                radio.checked = true;
+                showModeDetails(mode);
+            }
+        });
+    });
+});
+
+// Add CSS for security mode cards
+const style = document.createElement('style');
+style.textContent = `
+.security-mode-option {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 2px solid transparent;
+}
+
+.security-mode-option:hover {
+    border-color: var(--bs-primary);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.security-mode-option input[type="radio"]:checked + label {
+    font-weight: bold;
+}
+
+.security-mode-icon {
+    opacity: 0.8;
+}
+
+#filter-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    padding: 0.75rem;
+    background-color: #f8f9fa;
+}
+`;
+document.head.appendChild(style);
+</script>
 {% endblock %}

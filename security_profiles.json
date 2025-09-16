@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "modes": {
+    "light": {
+      "description": "Ads/trackers only. Minimal breakage.",
+      "lists": [
+        {
+          "name": "AdGuard DNS filter",
+          "url": "https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt",
+          "category": "general"
+        },
+        {
+          "name": "Peter Lowe’s Blocklist",
+          "url": "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext",
+          "category": "general"
+        },
+        {
+          "name": "Steven Black’s hosts",
+          "url": "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts",
+          "category": "general"
+        }
+      ]
+    },
+    "balanced": {
+      "description": "Ads/trackers + common malware/phishing. Recommended.",
+      "lists": [
+        {
+          "inherit": "light"
+        },
+        {
+          "name": "OISD Blocklist Big",
+          "url": "https://big.oisd.nl/",
+          "category": "general"
+        },
+        {
+          "name": "Phishing Army (extended)",
+          "url": "https://phishing.army/download/phishing_army_blocklist_extended.txt",
+          "category": "security"
+        },
+        {
+          "name": "Dandelion Sprout’s Anti-Malware List",
+          "url": "https://raw.githubusercontent.com/DandelionSprout/adfilt/master/AntiMalwareMalwareDomains.txt",
+          "category": "security"
+        },
+        {
+          "name": "NoCoin Filter List",
+          "url": "https://raw.githubusercontent.com/hoshsadiq/adblock-nocoin-list/master/nocoin.txt",
+          "category": "security"
+        }
+      ]
+    },
+    "maximum": {
+      "description": "Aggressive blocking incl. malware/phishing/scam/adult.",
+      "lists": [
+        {
+          "inherit": "balanced"
+        },
+        {
+          "name": "HaGeZi’s Ultimate Blocklist",
+          "url": null,
+          "catalog_hint": "HaGeZi Ultimate (AdGuard catalog)",
+          "category": "general"
+        },
+        {
+          "name": "HaGeZi’s Badware Hoster Blocklist",
+          "url": null,
+          "catalog_hint": "HaGeZi Badware Hoster (AdGuard catalog)",
+          "category": "security"
+        },
+        {
+          "name": "HaGeZi’s Threat Intelligence Feeds",
+          "url": null,
+          "catalog_hint": "HaGeZi Threat Intelligence (AdGuard catalog)",
+          "category": "security"
+        },
+        {
+          "name": "Scam Blocklist by DurableNapkin",
+          "url": "https://raw.githubusercontent.com/DurableNapkin/scam-blocklist/master/hosts.txt",
+          "category": "security"
+        },
+        {
+          "name": "uBlock filters – Badware risks",
+          "url": "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/badware.txt",
+          "category": "security"
+        },
+        {
+          "name": "Malicious URL Blocklist (URLHaus hosts)",
+          "url": "https://urlhaus.abuse.ch/downloads/hostfile/",
+          "category": "security"
+        },
+        {
+          "name": "The Big List of Hacked Malware Web Sites",
+          "url": "https://raw.githubusercontent.com/mitchellkrogza/The-Big-List-of-Hacked-Malware-Web-Sites/master/hacked-domains.txt",
+          "category": "security"
+        }
+      ],
+      "adult_content": {
+        "enable": true,
+        "catalog_hint": "AdGuard Adult/Parental filter"
+      }
+    }
+  }
+}
