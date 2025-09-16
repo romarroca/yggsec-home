@@ -511,7 +511,8 @@ function applySecurityMode() {
     fetch('/api/security/mode', {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
+            'X-CSRFToken': window.csrf_token,
+            'Content-Type': 'application/json'
         },
         body: JSON.stringify({ mode: selectedMode })
     })
