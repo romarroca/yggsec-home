@@ -90,10 +90,15 @@
                     <button class="btn btn-outline-secondary btn-sm me-1" onclick="showWireguardEditModal()">
                         Edit
                     </button>
+                    <button class="btn btn-outline-primary btn-sm" onclick="showWireguardModal()">
+                        Upload Config
+                    </button>
+                {% else %}
+                    <button class="btn btn-outline-primary btn-sm" onclick="showWireguardModal()">
+                        Upload Config
+                    </button>
+                    <small class="text-muted d-block mt-2">Upload a config file to enable controls</small>
                 {% endif %}
-                <button class="btn btn-outline-primary btn-sm" onclick="showWireguardModal()">
-                    Upload Config
-                </button>
             </div>
         </div>
     </div>

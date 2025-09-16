@@ -195,6 +195,10 @@ function wireguardControl(action) {
     .then(data => {
         if (data.success) {
             showAlert(data.message, 'success');
+            // Refresh page to update WireGuard status
+            setTimeout(() => {
+                location.reload();
+            }, 1500);
         } else {
             showAlert(data.message || 'WireGuard operation failed', 'danger');
         }
@@ -245,6 +249,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     showAlert(data.message, 'success');
                     bootstrap.Modal.getInstance(document.getElementById('wireguardModal')).hide();
                     fileInput.value = '';
+                    // Refresh page to show new controls
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
                 } else {
                     showAlert(data.message || 'Upload failed', 'danger');
                 }
@@ -291,6 +299,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.success) {
                     showAlert(data.message, 'success');
                     bootstrap.Modal.getInstance(document.getElementById('wireguardEditModal')).hide();
+                    // Refresh page to update status
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1500);
                 } else {
                     showAlert(data.message || 'Save failed', 'danger');
                 }
