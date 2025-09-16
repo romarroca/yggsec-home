@@ -141,3 +141,81 @@ class AdGuardManager:
         except Exception as e:
             logger.error(f"Failed to get query log config: {e}")
             return None
+
+    def get_query_log(self, older_than=None, limit=100):
+        try:
+            localhost_url = self._get_base_url(use_ip=False)
+            params = {}
+            if older_than:
+                params['older_than'] = older_than
+            if limit:
+                params['limit'] = limit
+
+            response = requests.get(f'{localhost_url}/control/querylog',
+                                  params=params, timeout=10)
+            if response.status_code == 200:
+                return response.json()
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get query log: {e}")
+            return None
+
+    def get_stats_info(self):
+        try:
+            localhost_url = self._get_base_url(use_ip=False)
+            response = requests.get(f'{localhost_url}/control/stats_info',
+                                  timeout=5)
+            if response.status_code == 200:
+                return response.json()
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get stats info: {e}")
+            return None
+
+    def get_stats_history(self):
+        try:
+            localhost_url = self._get_base_url(use_ip=False)
+            response = requests.get(f'{localhost_url}/control/stats_history',
+                                  timeout=5)
+            if response.status_code == 200:
+                return response.json()
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get stats history: {e}")
+            return None
+
+    def get_top_blocked_domains(self):
+        try:
+            localhost_url = self._get_base_url(use_ip=False)
+            response = requests.get(f'{localhost_url}/control/stats/top_blocked_domains',
+                                  timeout=5)
+            if response.status_code == 200:
+                return response.json()
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get top blocked domains: {e}")
+            return None
+
+    def get_top_clients(self):
+        try:
+            localhost_url = self._get_base_url(use_ip=False)
+            response = requests.get(f'{localhost_url}/control/stats/top_clients',
+                                  timeout=5)
+            if response.status_code == 200:
+                return response.json()
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get top clients: {e}")
+            return None
+
+    def get_top_queried_domains(self):
+        try:
+            localhost_url = self._get_base_url(use_ip=False)
+            response = requests.get(f'{localhost_url}/control/stats/top_queried_domains',
+                                  timeout=5)
+            if response.status_code == 200:
+                return response.json()
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get top queried domains: {e}")
+            return None

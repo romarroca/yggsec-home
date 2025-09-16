@@ -155,6 +155,17 @@ def create_app():
                                  network=None, adguard=None,
                                  wireguard=None, system=None)
 
+    @app.route('/statistics')
+    @login_required
+    def statistics():
+        """AdGuard statistics page"""
+        try:
+            return render_template('statistics.html')
+        except Exception as e:
+            app.logger.error(f"Statistics error: {e}")
+            flash(f"Error loading statistics: {str(e)}", 'error')
+            return render_template('statistics.html')
+
     # Network Management Routes
     @app.route('/api/network/status')
     @login_required
@@ -286,6 +297,65 @@ def create_app():
 
         except Exception as e:
             app.logger.error(f"AdGuard control error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    # AdGuard Statistics Routes
+    @app.route('/api/adguard/stats')
+    def adguard_stats():
+        """Get AdGuard statistics"""
+        try:
+            stats = adguard_mgr.get_stats()
+            stats_info = adguard_mgr.get_stats_info()
+            return jsonify({
+                'success': True,
+                'stats': stats,
+                'stats_info': stats_info
+            })
+        except Exception as e:
+            app.logger.error(f"AdGuard stats error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/adguard/top-domains')
+    def adguard_top_domains():
+        """Get top queried and blocked domains"""
+        try:
+            top_queried = adguard_mgr.get_top_queried_domains()
+            top_blocked = adguard_mgr.get_top_blocked_domains()
+            return jsonify({
+                'success': True,
+                'top_queried': top_queried,
+                'top_blocked': top_blocked
+            })
+        except Exception as e:
+            app.logger.error(f"AdGuard top domains error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/adguard/top-clients')
+    def adguard_top_clients():
+        """Get top clients"""
+        try:
+            top_clients = adguard_mgr.get_top_clients()
+            return jsonify({
+                'success': True,
+                'top_clients': top_clients
+            })
+        except Exception as e:
+            app.logger.error(f"AdGuard top clients error: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/adguard/query-log')
+    def adguard_query_log():
+        """Get recent query log"""
+        try:
+            limit = request.args.get('limit', 50, type=int)
+            older_than = request.args.get('older_than', None)
+            query_log = adguard_mgr.get_query_log(older_than=older_than, limit=limit)
+            return jsonify({
+                'success': True,
+                'query_log': query_log
+            })
+        except Exception as e:
+            app.logger.error(f"AdGuard query log error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
 
     # WireGuard Routes
