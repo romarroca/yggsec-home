@@ -20,6 +20,30 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: 20px;
+        }
+        .login-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 400px;
+        }
+        .logo-section {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .logo-section img {
+            height: 120px;
+            margin-bottom: 1.5rem;
+        }
+        .login-card {
+            width: 100%;
+            background: var(--bs-body-bg);
+            border: 1px solid var(--bs-border-color);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
         }
     </style>
 </head>
@@ -29,15 +53,18 @@
         <i class="bi bi-moon-fill" id="theme-icon"></i>
     </div>
 
-    <!-- Login Card -->
-    <div class="login-card">
-        <div class="login-header">
-            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="YggSec Logo" style="height: 64px; margin-bottom: 1rem;">
-            <h3 class="mb-0">YggSec-Home</h3>
-            <p class="mb-0 opacity-75">Secure Parental Control</p>
+    <!-- Login Container -->
+    <div class="login-container">
+        <!-- Logo Section -->
+        <div class="logo-section">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="YggSec Logo">
+            <h3 class="mb-2">YggSec-Home</h3>
+            <p class="mb-0 text-muted">Secure Parental Control</p>
         </div>
 
-        <div class="login-body">
+        <!-- Login Card -->
+        <div class="login-card">
+            <div class="p-4">
             <!-- Flash Messages -->
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
@@ -72,10 +99,11 @@
                 </button>
             </form>
 
-            <div class="text-center mt-4">
-                <small class="text-muted">
-                    Default login: <strong>yggsec</strong> / <strong>[password set during installation]</strong>
-                </small>
+                <div class="text-center mt-4">
+                    <small class="text-muted">
+                        Default login: <strong>yggsec</strong> / <strong>[password set during installation]</strong>
+                    </small>
+                </div>
             </div>
         </div>
     </div>
