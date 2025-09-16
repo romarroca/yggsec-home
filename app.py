@@ -138,11 +138,11 @@ def create_app():
     def dashboard():
         """Main dashboard - AdGuard statistics"""
         try:
-            return render_template('statistics.html')
+            return render_template('dashboard.html')
         except Exception as e:
             app.logger.error(f"Dashboard error: {e}")
             flash(f"Error loading dashboard: {str(e)}", 'error')
-            return render_template('statistics.html')
+            return render_template('dashboard.html')
 
     @app.route('/settings')
     @login_required
@@ -155,7 +155,7 @@ def create_app():
             wireguard_status = wireguard_mgr.get_connection_status()
             system_info = system_mgr.get_system_info()
 
-            return render_template('dashboard.html',
+            return render_template('settings.html',
                                  network=network_status,
                                  adguard=adguard_status,
                                  wireguard=wireguard_status,
@@ -164,7 +164,7 @@ def create_app():
         except Exception as e:
             app.logger.error(f"Settings error: {e}")
             flash(f"Error loading settings: {str(e)}", 'error')
-            return render_template('dashboard.html',
+            return render_template('settings.html',
                                  network=None, adguard=None,
                                  wireguard=None, system=None)
 
