@@ -80,41 +80,116 @@ class WireGuardManager:
 
     def validate_config_content(self, content):
         """Validate WireGuard configuration content"""
-        required_sections = ['[Interface]', '[Peer]']
-        required_interface_keys = ['PrivateKey']
-        required_peer_keys = ['PublicKey']
+        # Check if content is empty or too short
+        if not content or len(content.strip()) < 50:
+            return False, "Configuration file is empty or too short"
 
-        # Basic format validation
-        for section in required_sections:
-            if section not in content:
-                return False, f"Missing required section: {section}"
+        # Check if it looks like a WireGuard config
+        if '[Interface]' not in content:
+            return False, "Invalid WireGuard configuration: Missing [Interface] section"
 
-        # Check for dangerous commands
+        if '[Peer]' not in content:
+            return False, "Invalid WireGuard configuration: Missing [Peer] section"
+
+        # Check for required Interface keys
+        interface_section = self._extract_section(content, '[Interface]')
+        if not re.search(r'PrivateKey\s*=', interface_section, re.IGNORECASE):
+            return False, "Missing required PrivateKey in [Interface] section"
+
+        # Check for required Peer keys
+        peer_section = self._extract_section(content, '[Peer]')
+        if not re.search(r'PublicKey\s*=', peer_section, re.IGNORECASE):
+            return False, "Missing required PublicKey in [Peer] section"
+
+        # Validate key formats (WireGuard uses 32-byte keys encoded in base64 = 44 chars)
+        private_key_match = re.search(r'PrivateKey\s*=\s*([A-Za-z0-9+/=]+)', content)
+        if private_key_match:
+            key = private_key_match.group(1).strip()
+            if len(key) != 44 or not re.match(r'^[A-Za-z0-9+/]+={0,2}$', key):
+                return False, "Invalid PrivateKey format (must be 44-character base64)"
+
+        public_key_match = re.search(r'PublicKey\s*=\s*([A-Za-z0-9+/=]+)', content)
+        if public_key_match:
+            key = public_key_match.group(1).strip()
+            if len(key) != 44 or not re.match(r'^[A-Za-z0-9+/]+={0,2}$', key):
+                return False, "Invalid PublicKey format (must be 44-character base64)"
+
+        # Check for dangerous command injection patterns
         dangerous_patterns = [
-            r'PostUp\s*=.*[;&|]',  # Command injection in PostUp
-            r'PreDown\s*=.*[;&|]', # Command injection in PreDown
-            r'PostDown\s*=.*[;&|]', # Command injection in PostDown
-            r'PreUp\s*=.*[;&|]'    # Command injection in PreUp
+            r'PostUp\s*=.*[;&|`$]',   # Command injection in PostUp
+            r'PreDown\s*=.*[;&|`$]',  # Command injection in PreDown
+            r'PostDown\s*=.*[;&|`$]', # Command injection in PostDown
+            r'PreUp\s*=.*[;&|`$]',    # Command injection in PreUp
+            r'[;&|`]',                # General command injection chars
+            r'\$\(',                  # Command substitution
+            r'`.*`',                  # Backtick command execution
         ]
 
         for pattern in dangerous_patterns:
             if re.search(pattern, content, re.IGNORECASE):
-                return False, "Configuration contains potentially dangerous commands"
+                return False, "Configuration contains potentially dangerous commands or injection patterns"
 
-        # Validate key format (base64)
-        private_key_match = re.search(r'PrivateKey\s*=\s*([A-Za-z0-9+/=]+)', content)
-        if private_key_match:
-            key = private_key_match.group(1)
-            if len(key) != 44 or not re.match(r'^[A-Za-z0-9+/]+={0,2}$', key):
-                return False, "Invalid PrivateKey format"
+        # Validate IP addresses if present
+        if 'Address' in content:
+            address_match = re.search(r'Address\s*=\s*([^\s\n]+)', content)
+            if address_match:
+                address = address_match.group(1)
+                if not self._validate_ip_address(address):
+                    return False, f"Invalid IP address format: {address}"
 
-        public_key_match = re.search(r'PublicKey\s*=\s*([A-Za-z0-9+/=]+)', content)
-        if public_key_match:
-            key = public_key_match.group(1)
-            if len(key) != 44 or not re.match(r'^[A-Za-z0-9+/]+={0,2}$', key):
-                return False, "Invalid PublicKey format"
+        # Check for reasonable file size (WireGuard configs should be small)
+        if len(content) > 10240:  # 10KB limit
+            return False, "Configuration file is too large (max 10KB)"
+
+        # Check for non-ASCII characters that might indicate binary file
+        try:
+            content.encode('ascii')
+        except UnicodeEncodeError:
+            return False, "Configuration contains non-ASCII characters"
 
         return True, "Configuration is valid"
+
+    def _extract_section(self, content, section_name):
+        """Extract a specific section from the config"""
+        lines = content.split('\n')
+        section_lines = []
+        in_section = False
+
+        for line in lines:
+            line = line.strip()
+            if line == section_name:
+                in_section = True
+                continue
+            elif line.startswith('[') and line.endswith(']') and in_section:
+                break
+            elif in_section:
+                section_lines.append(line)
+
+        return '\n'.join(section_lines)
+
+    def _validate_ip_address(self, address):
+        """Validate IP address format (supports CIDR notation)"""
+        try:
+            # Handle CIDR notation
+            if '/' in address:
+                ip, prefix = address.split('/')
+                if not (0 <= int(prefix) <= 32):
+                    return False
+            else:
+                ip = address
+
+            # Basic IP validation
+            parts = ip.split('.')
+            if len(parts) != 4:
+                return False
+
+            for part in parts:
+                if not (0 <= int(part) <= 255):
+                    return False
+
+            return True
+        except (ValueError, AttributeError):
+            return False
 
     def get_config_content(self):
         """Get current WireGuard configuration content"""

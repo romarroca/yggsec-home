@@ -316,8 +316,22 @@ def create_app():
             if not file.filename.lower().endswith('.conf'):
                 return jsonify({'success': False, 'error': 'Only .conf files are allowed'}), 400
 
+            # Check file size (Flask also has this but let's be explicit)
+            file.seek(0, 2)  # Seek to end
+            file_size = file.tell()
+            file.seek(0)     # Reset to beginning
+
+            if file_size > 10240:  # 10KB limit
+                return jsonify({'success': False, 'error': 'File too large (max 10KB)'}), 400
+
+            if file_size == 0:
+                return jsonify({'success': False, 'error': 'File is empty'}), 400
+
             # Read and validate content
-            content = file.read().decode('utf-8')
+            try:
+                content = file.read().decode('utf-8')
+            except UnicodeDecodeError:
+                return jsonify({'success': False, 'error': 'File must be valid UTF-8 text'}), 400
 
             success, message = wireguard_mgr.upload_config(content)
             return jsonify({'success': success, 'message': message})

@@ -229,6 +229,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
+            // Check file size (max 10KB)
+            if (file.size > 10240) {
+                showAlert('Configuration file is too large (max 10KB)', 'danger');
+                return;
+            }
+
+            // Check if file is empty
+            if (file.size === 0) {
+                showAlert('Configuration file is empty', 'danger');
+                return;
+            }
+
             const formData = new FormData();
             formData.append('config_file', file);
             formData.append('csrf_token', window.csrf_token);
