@@ -136,7 +136,18 @@ def create_app():
     @app.route('/')
     @login_required
     def dashboard():
-        """Main dashboard"""
+        """Main dashboard - AdGuard statistics"""
+        try:
+            return render_template('statistics.html')
+        except Exception as e:
+            app.logger.error(f"Dashboard error: {e}")
+            flash(f"Error loading dashboard: {str(e)}", 'error')
+            return render_template('statistics.html')
+
+    @app.route('/settings')
+    @login_required
+    def settings():
+        """Settings page - system configuration"""
         try:
             # Get status from all services
             network_status = network_mgr.get_current_config()
@@ -151,22 +162,11 @@ def create_app():
                                  system=system_info)
 
         except Exception as e:
-            app.logger.error(f"Dashboard error: {e}")
-            flash(f"Error loading dashboard: {str(e)}", 'error')
+            app.logger.error(f"Settings error: {e}")
+            flash(f"Error loading settings: {str(e)}", 'error')
             return render_template('dashboard.html',
                                  network=None, adguard=None,
                                  wireguard=None, system=None)
-
-    @app.route('/statistics')
-    @login_required
-    def statistics():
-        """AdGuard statistics page"""
-        try:
-            return render_template('statistics.html')
-        except Exception as e:
-            app.logger.error(f"Statistics error: {e}")
-            flash(f"Error loading statistics: {str(e)}", 'error')
-            return render_template('statistics.html')
 
     # Network Management Routes
     @app.route('/api/network/status')
