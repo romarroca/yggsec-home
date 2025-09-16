@@ -28,9 +28,16 @@
                             </p>
                         </div>
                         <div class="setting-actions">
-                            <button class="btn btn-outline-primary" onclick="showNetworkModal()">
-                                Configure <i class="bi bi-chevron-right"></i>
-                            </button>
+                            <div class="dropdown">
+                                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                    <i class="bi bi-three-dots"></i>
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" href="#" onclick="showNetworkModal()">
+                                        <i class="bi bi-gear text-primary me-2"></i>Configure Network
+                                    </a></li>
+                                </ul>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -90,9 +97,16 @@
                             </p>
                         </div>
                         <div class="setting-actions">
-                            <button class="btn btn-outline-primary" onclick="showSecurityModeModal()">
-                                Configure <i class="bi bi-chevron-right"></i>
-                            </button>
+                            <div class="dropdown">
+                                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                    <i class="bi bi-three-dots"></i>
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" href="#" onclick="showSecurityModeModal()">
+                                        <i class="bi bi-shield-gear text-primary me-2"></i>Configure Security
+                                    </a></li>
+                                </ul>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -138,9 +152,16 @@
                                     </ul>
                                 </div>
                             {% else %}
-                                <button class="btn btn-outline-primary" onclick="showWireguardModal()">
-                                    Upload Config <i class="bi bi-chevron-right"></i>
-                                </button>
+                                <div class="dropdown">
+                                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                        <i class="bi bi-three-dots"></i>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li><a class="dropdown-item" href="#" onclick="showWireguardModal()">
+                                            <i class="bi bi-upload text-primary me-2"></i>Upload Config
+                                        </a></li>
+                                    </ul>
+                                </div>
                             {% endif %}
                         </div>
                     </div>
