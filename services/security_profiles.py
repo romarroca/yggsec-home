@@ -3,6 +3,8 @@
 import json
 import logging
 import requests
+import yaml
+import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -42,26 +44,24 @@ class SecurityProfileManager:
 
     def _get_current_mode(self) -> str:
         """
-        Determine current security mode by analyzing enabled filters.
+        Determine current security mode by analyzing enabled filters in config file.
         Returns 'balanced' as default if unable to determine.
         """
         try:
-            # Get current AdGuard filters
-            localhost_url = self.adguard._get_base_url(use_ip=False)
-            auth = self.adguard._get_auth()
-            logger.info(f"Trying to connect to AdGuard at: {localhost_url}")
-            response = requests.get(f'{localhost_url}/control/filtering/status', timeout=5, auth=auth)
+            config_path = Path('/opt/AdGuardHome/AdGuardHome.yaml')
 
-            logger.info(f"AdGuard filtering status response: {response.status_code}")
-            if response.status_code != 200:
-                logger.warning(f"Could not get filtering status: {response.status_code} - {response.text}")
+            if not config_path.exists():
+                logger.warning("AdGuard config file not found, defaulting to balanced")
                 return 'balanced'
 
-            current_filters = response.json().get('filters', [])
+            with open(config_path, 'r') as f:
+                config = yaml.safe_load(f)
+
+            current_filters = config.get('filters', [])
             enabled_urls = {f.get('url') for f in current_filters if f.get('enabled')}
 
             # Check which mode matches current enabled filters best
-            for mode_name in ['light', 'balanced', 'maximum']:
+            for mode_name in ['maximum', 'balanced', 'light']:  # Check from most restrictive to least
                 expected_urls = set(self._get_filter_urls_for_mode(mode_name))
                 if enabled_urls >= expected_urls:  # Current filters include all expected
                     return mode_name
@@ -132,7 +132,7 @@ class SecurityProfileManager:
 
     def set_security_mode(self, mode: str) -> Tuple[bool, str]:
         """
-        Set the security mode and update AdGuard filters accordingly.
+        Set the security mode by directly editing AdGuard configuration file.
 
         Args:
             mode: One of 'light', 'balanced', or 'maximum'
@@ -146,28 +146,15 @@ class SecurityProfileManager:
         try:
             logger.info(f"Setting security mode to: {mode}")
 
-            # Step 0: Check if AdGuard is accessible
-            if not self._check_adguard_accessibility():
-                return False, "AdGuard Home API is not accessible. Please check if AdGuard is running and properly configured."
-
-            # Step 1: Disable all current filters
-            success, message = self._disable_all_filters()
+            # Step 1: Update AdGuard config file
+            success, message = self._update_adguard_config(mode)
             if not success:
-                return False, f"Failed to disable current filters: {message}"
+                return False, f"Failed to update AdGuard config: {message}"
 
-            # Step 2: Enable filters for the new mode
-            success, message = self._enable_filters_for_mode(mode)
+            # Step 2: Restart AdGuard service to apply changes
+            success, message = self._restart_adguard()
             if not success:
-                return False, f"Failed to enable filters for {mode}: {message}"
-
-            # Step 3: Handle adult content filtering for maximum mode
-            if mode == 'maximum':
-                adult_config = self.profiles['modes'][mode].get('adult_content', {})
-                if adult_config.get('enable'):
-                    self._enable_adult_content_filtering()
-
-            # Step 4: Reload AdGuard configuration
-            self._reload_adguard()
+                return False, f"Failed to restart AdGuard: {message}"
 
             # Update current mode
             self.current_mode = mode
@@ -179,155 +166,71 @@ class SecurityProfileManager:
             logger.error(f"Failed to set security mode {mode}: {e}", exc_info=True)
             return False, f"Failed to set security mode: {str(e)}"
 
-    def _check_adguard_accessibility(self) -> bool:
-        """Check if AdGuard Home API is accessible."""
+    def _update_adguard_config(self, mode: str) -> Tuple[bool, str]:
+        """Update AdGuard configuration file with filters for the specified mode."""
         try:
-            localhost_url = self.adguard._get_base_url(use_ip=False)
-            logger.info(f"Checking AdGuard accessibility at: {localhost_url}")
+            config_path = Path('/opt/AdGuardHome/AdGuardHome.yaml')
 
-            # Try to get basic status - using auth if available
-            auth = self.adguard._get_auth()
-            response = requests.get(f'{localhost_url}/control/status', timeout=5, auth=auth)
-            logger.info(f"AdGuard status check response: {response.status_code}")
+            # Read current config
+            with open(config_path, 'r') as f:
+                config = yaml.safe_load(f)
 
-            if response.status_code == 200:
-                return True
-            elif response.status_code == 401:
-                logger.warning("AdGuard requires authentication - this may need manual setup")
-                return False
-            else:
-                logger.warning(f"AdGuard returned unexpected status: {response.status_code}")
-                return False
+            # Get filters for the mode
+            target_filters = self._get_all_filters_for_mode(mode)
 
-        except requests.exceptions.ConnectionError:
-            logger.error("Cannot connect to AdGuard Home - service may be down")
-            return False
-        except Exception as e:
-            logger.error(f"Error checking AdGuard accessibility: {e}")
-            return False
+            # Update filters section
+            config['filters'] = []
+            for i, filter_config in enumerate(target_filters, 1):
+                if filter_config.get('url'):  # Only add filters with URLs
+                    config['filters'].append({
+                        'enabled': True,
+                        'url': filter_config['url'],
+                        'name': filter_config['name'],
+                        'id': i
+                    })
 
-    def _disable_all_filters(self) -> Tuple[bool, str]:
-        """Disable all currently enabled filters."""
-        try:
-            localhost_url = self.adguard._get_base_url(use_ip=False)
-            auth = self.adguard._get_auth()
+            # Handle adult content for maximum mode
+            if mode == 'maximum':
+                adult_config = self.profiles['modes'][mode].get('adult_content', {})
+                if adult_config.get('enable'):
+                    # Enable parental control in AdGuard config
+                    if 'dns' not in config:
+                        config['dns'] = {}
+                    config['dns']['parental_enabled'] = True
 
-            # Get current filters
-            response = requests.get(f'{localhost_url}/control/filtering/status', timeout=5, auth=auth)
-            if response.status_code != 200:
-                return False, "Could not get current filter status"
+            # Write updated config
+            with open(config_path, 'w') as f:
+                yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
-            current_filters = response.json().get('filters', [])
-
-            # Disable each enabled filter
-            for filter_item in current_filters:
-                if filter_item.get('enabled'):
-                    filter_data = {
-                        'url': filter_item.get('url', ''),
-                        'enabled': False
-                    }
-                    response = requests.post(
-                        f'{localhost_url}/control/filtering/set_url',
-                        json=filter_data,
-                        timeout=5,
-                        auth=auth
-                    )
-                    if response.status_code != 200:
-                        logger.warning(f"Failed to disable filter: {filter_item.get('name', 'Unknown')}")
-
-            return True, "All filters disabled"
+            logger.info(f"Updated AdGuard config with {len(config['filters'])} filters for {mode} mode")
+            return True, f"Updated AdGuard configuration for {mode} mode"
 
         except Exception as e:
-            logger.error(f"Failed to disable filters: {e}")
+            logger.error(f"Failed to update AdGuard config: {e}")
             return False, str(e)
 
-    def _enable_filters_for_mode(self, mode: str) -> Tuple[bool, str]:
-        """Enable all filters required for the specified mode."""
+    def _restart_adguard(self) -> Tuple[bool, str]:
+        """Restart AdGuard Home service to apply configuration changes."""
         try:
-            localhost_url = self.adguard._get_base_url(use_ip=False)
-            auth = self.adguard._get_auth()
-            filters = self._get_all_filters_for_mode(mode)
+            # Restart the service
+            result = subprocess.run(['sudo', 'systemctl', 'restart', 'AdGuardHome'],
+                                  capture_output=True, text=True, timeout=30)
 
-            enabled_count = 0
-            skipped_count = 0
+            if result.returncode == 0:
+                logger.info("AdGuard Home restarted successfully")
+                return True, "AdGuard Home restarted successfully"
+            else:
+                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+                logger.error(f"Failed to restart AdGuard Home: {error_msg}")
+                return False, f"Failed to restart service: {error_msg}"
 
-            for filter_config in filters:
-                filter_url = filter_config.get('url')
-                filter_name = filter_config.get('name', 'Unknown')
-
-                if not filter_url:
-                    # Handle catalog-only filters (requires manual intervention)
-                    logger.info(f"Skipping catalog-only filter: {filter_name}")
-                    skipped_count += 1
-                    continue
-
-                # Add and enable the filter
-                filter_data = {
-                    'url': filter_url,
-                    'enabled': True,
-                    'name': filter_name
-                }
-
-                response = requests.post(
-                    f'{localhost_url}/control/filtering/add_url',
-                    json=filter_data,
-                    timeout=10,
-                    auth=auth
-                )
-
-                if response.status_code == 200:
-                    enabled_count += 1
-                    logger.info(f"Enabled filter: {filter_name}")
-                else:
-                    logger.warning(f"Failed to enable filter: {filter_name}")
-
-            message = f"Enabled {enabled_count} filters"
-            if skipped_count > 0:
-                message += f" ({skipped_count} catalog filters require manual setup)"
-
-            return True, message
-
+        except subprocess.TimeoutExpired:
+            logger.error("AdGuard restart timed out")
+            return False, "Service restart timed out"
         except Exception as e:
-            logger.error(f"Failed to enable filters for {mode}: {e}")
+            logger.error(f"Failed to restart AdGuard Home: {e}")
             return False, str(e)
 
-    def _enable_adult_content_filtering(self) -> None:
-        """Enable AdGuard's built-in adult content filtering."""
-        try:
-            localhost_url = self.adguard._get_base_url(use_ip=False)
-            auth = self.adguard._get_auth()
-
-            # Enable parental control
-            parental_data = {'enabled': True}
-            response = requests.post(
-                f'{localhost_url}/control/parental/enable',
-                json=parental_data,
-                timeout=5,
-                auth=auth
-            )
-
-            if response.status_code == 200:
-                logger.info("Enabled adult content filtering")
-            else:
-                logger.warning("Failed to enable adult content filtering")
-
-        except Exception as e:
-            logger.error(f"Failed to enable adult content filtering: {e}")
-
-    def _reload_adguard(self) -> None:
-        """Reload AdGuard Home configuration."""
-        try:
-            localhost_url = self.adguard._get_base_url(use_ip=False)
-            auth = self.adguard._get_auth()
-            response = requests.post(f'{localhost_url}/control/filtering/refresh', timeout=10, auth=auth)
-
-            if response.status_code == 200:
-                logger.info("AdGuard configuration reloaded")
-            else:
-                logger.warning("Failed to reload AdGuard configuration")
-
-        except Exception as e:
-            logger.error(f"Failed to reload AdGuard: {e}")
 
     def get_mode_summary(self, mode: str) -> Optional[Dict]:
         """
