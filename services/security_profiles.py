@@ -145,6 +145,10 @@ class SecurityProfileManager:
         try:
             logger.info(f"Setting security mode to: {mode}")
 
+            # Step 0: Check if AdGuard is accessible
+            if not self._check_adguard_accessibility():
+                return False, "AdGuard Home API is not accessible. Please check if AdGuard is running and properly configured."
+
             # Step 1: Disable all current filters
             success, message = self._disable_all_filters()
             if not success:
@@ -173,6 +177,32 @@ class SecurityProfileManager:
         except Exception as e:
             logger.error(f"Failed to set security mode {mode}: {e}", exc_info=True)
             return False, f"Failed to set security mode: {str(e)}"
+
+    def _check_adguard_accessibility(self) -> bool:
+        """Check if AdGuard Home API is accessible."""
+        try:
+            localhost_url = self.adguard._get_base_url(use_ip=False)
+            logger.info(f"Checking AdGuard accessibility at: {localhost_url}")
+
+            # Try to get basic status - this should work without auth
+            response = requests.get(f'{localhost_url}/control/status', timeout=5)
+            logger.info(f"AdGuard status check response: {response.status_code}")
+
+            if response.status_code == 200:
+                return True
+            elif response.status_code == 401:
+                logger.warning("AdGuard requires authentication - this may need manual setup")
+                return False
+            else:
+                logger.warning(f"AdGuard returned unexpected status: {response.status_code}")
+                return False
+
+        except requests.exceptions.ConnectionError:
+            logger.error("Cannot connect to AdGuard Home - service may be down")
+            return False
+        except Exception as e:
+            logger.error(f"Error checking AdGuard accessibility: {e}")
+            return False
 
     def _disable_all_filters(self) -> Tuple[bool, str]:
         """Disable all currently enabled filters."""
