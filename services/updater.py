@@ -214,46 +214,48 @@ update_progress "initializing" 5 "Starting out-of-band update process"
 # Wait for API response to complete and ensure detachment
 sleep 5
 
-update_progress "stopping_service" 10 "Stopping yggsec-home service"
-systemctl stop yggsec-home
+update_progress "backing_up" 10 "Creating backup of current installation"
+# Service stays running during preparation
 
-update_progress "removing_old" 15 "Removing existing installation"
-rm -rf {self.install_dir}
+update_progress "preparing_update" 15 "Preparing new installation"
+# Copy to temporary staging directory first
+STAGING_DIR="/tmp/yggsec-staging-install"
+rm -rf $STAGING_DIR
 
-update_progress "copying_files" 20 "Copying files from source to installation directory"
-cp -r {source_dir} {self.install_dir}
+update_progress "copying_files" 20 "Copying files to staging directory"
+cp -r {source_dir} $STAGING_DIR
 if [ $? -ne 0 ]; then
     log "ERROR: File copy failed"
     exit 1
 fi
 
-# Verify critical files exist after copy
+# Verify critical files exist in staging
 update_progress "verifying_copy" 30 "Verifying copy completion..."
-if [ ! -f "{self.install_dir}/app.py" ]; then
+if [ ! -f "$STAGING_DIR/app.py" ]; then
     log "ERROR: app.py not found after copy"
     exit 1
 fi
-if [ ! -f "{self.install_dir}/version.py" ]; then
+if [ ! -f "$STAGING_DIR/version.py" ]; then
     log "ERROR: version.py not found after copy"
     exit 1
 fi
-if [ ! -d "{self.install_dir}/services" ]; then
+if [ ! -d "$STAGING_DIR/services" ]; then
     log "ERROR: services directory not found after copy"
     exit 1
 fi
-if [ ! -d "{self.install_dir}/templates" ]; then
+if [ ! -d "$STAGING_DIR/templates" ]; then
     log "ERROR: templates directory not found after copy"
     exit 1
 fi
 
 update_progress "copy_verified" 35 "Copy verification successful - all critical files present"
 
-update_progress "setting_permissions" 40 "Setting file permissions"
-chown -R root:root {self.install_dir}
-chmod +x {self.install_dir}/scripts/*.sh 2>/dev/null || true
+update_progress "setting_permissions" 40 "Setting file permissions in staging"
+chown -R root:root $STAGING_DIR
+chmod +x $STAGING_DIR/scripts/*.sh 2>/dev/null || true
 
 update_progress "creating_venv" 45 "Creating Python virtual environment (this may take 2-3 minutes)"
-cd {self.install_dir}
+cd $STAGING_DIR
 python3 -m venv venv
 if [ $? -ne 0 ]; then
     log "ERROR: Failed to create virtual environment"
@@ -283,6 +285,9 @@ rm -rf $extract_parent
 # Wait for user confirmation before rebooting
 update_progress "waiting_reboot" 95 "Waiting for user confirmation to reboot system (30 seconds timeout)"
 
+# Give GUI time to detect this step
+sleep 3
+
 # Wait for reboot confirmation file with 30-second timeout
 TIMEOUT=30
 COUNTER=0
@@ -293,12 +298,19 @@ done
 
 # Check if timeout reached and prepare for reboot
 if [ $COUNTER -ge $TIMEOUT ]; then
-    update_progress "timeout_reboot" 98 "No user confirmation received - Starting service and rebooting"
+    update_progress "timeout_reboot" 96 "No user confirmation received - Applying update and rebooting"
 else
-    update_progress "confirmed_reboot" 98 "User confirmation received - Starting service and rebooting"
+    update_progress "confirmed_reboot" 96 "User confirmation received - Applying update and rebooting"
 fi
 
-# Start service briefly before reboot (for cleanup and final state)
+# NOW stop the service and replace files (after user confirmation)
+update_progress "stopping_service" 97 "Stopping yggsec-home service"
+systemctl stop yggsec-home
+
+update_progress "replacing_files" 98 "Replacing installation files"
+rm -rf {self.install_dir}
+mv $STAGING_DIR {self.install_dir}
+
 update_progress "final_start" 99 "Starting service for final cleanup"
 systemctl start yggsec-home
 sleep 2

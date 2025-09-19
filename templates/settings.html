@@ -807,7 +807,8 @@ function downloadUpdate(downloadUrl, checksumUrl) {
 }
 
 function applyUpdate(sourceDir) {
-    updateProgress('Applying update. System will restart...', 75);
+    // Server-side progress polling will handle all progress updates from here
+    // No manual progress updates needed as the systemd script provides real-time progress
 
     fetch('/api/system/update/apply', {
         method: 'POST',
@@ -823,21 +824,20 @@ function applyUpdate(sourceDir) {
     .then(data => {
         if (data.error) {
             updateProgress(`Update failed: ${data.error}`, 0, true);
+            stopProgressPolling();
             return;
         }
 
         if (data.success) {
-            updateProgress('Update successful! System restarting...', 100);
-
-            // Wait for system restart
-            setTimeout(() => {
-                window.location.reload();
-            }, 5000);
+            // Server-side polling will handle the reboot process
+            // The progress file will show the actual reboot status
+            console.log('Update process started successfully');
         }
     })
     .catch(error => {
         console.error('Update error:', error);
         updateProgress('Update failed: Network error', 0, true);
+        stopProgressPolling();
     });
 }
 
@@ -846,7 +846,7 @@ function showUpdateProgress() {
     progressModal.className = 'modal fade';
     progressModal.setAttribute('data-bs-backdrop', 'static');
     progressModal.innerHTML = `
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">
@@ -1117,6 +1117,7 @@ document.head.appendChild(settingsStyle);
 
 // Progress polling functions
 let progressPollingInterval = null;
+let lastProgressPercentage = 0; // Track progress to prevent backwards movement
 
 function startProgressPolling() {
     // Clear any existing interval
@@ -1124,8 +1125,11 @@ function startProgressPolling() {
         clearInterval(progressPollingInterval);
     }
 
-    // Poll every 2 seconds
-    progressPollingInterval = setInterval(pollUpdateProgress, 2000);
+    // Reset progress tracker for new update
+    lastProgressPercentage = 0;
+
+    // Poll every 1 second for better responsiveness
+    progressPollingInterval = setInterval(pollUpdateProgress, 1000);
 }
 
 function stopProgressPolling() {
@@ -1142,8 +1146,11 @@ function pollUpdateProgress() {
             if (data.success && data.progress) {
                 const progress = data.progress;
 
-                // Update progress bar and message
-                updateProgress(progress.message, progress.percentage);
+                // Only update if progress is moving forward (prevent regression)
+                if (progress.percentage >= lastProgressPercentage) {
+                    updateProgress(progress.message, progress.percentage);
+                    lastProgressPercentage = progress.percentage;
+                }
 
                 // Check if update is complete or needs reboot confirmation
                 if (progress.step === 'waiting_reboot') {
