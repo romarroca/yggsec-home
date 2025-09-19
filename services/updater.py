@@ -159,25 +159,29 @@ class UpdateManager:
                 shutil.copytree(self.install_dir, self.backup_dir)
                 logger.info(f"Backup created at {self.backup_dir}")
 
+            # Create persistent temp directory (will be cleaned up by update script)
+            extract_dir = tempfile.mkdtemp(prefix='yggsec-update-')
+
             # Extract update package
-            with tempfile.TemporaryDirectory() as extract_dir:
-                with tarfile.open(package_path, 'r:gz') as tar:
-                    tar.extractall(extract_dir)
+            with tarfile.open(package_path, 'r:gz') as tar:
+                tar.extractall(extract_dir)
 
-                # Find extracted directory
-                extracted_dirs = [d for d in os.listdir(extract_dir)
-                                if os.path.isdir(os.path.join(extract_dir, d))]
+            # Find extracted directory
+            extracted_dirs = [d for d in os.listdir(extract_dir)
+                            if os.path.isdir(os.path.join(extract_dir, d))]
 
-                if not extracted_dirs:
-                    return {"error": "Invalid update package structure"}
+            if not extracted_dirs:
+                # Clean up temp directory on error
+                shutil.rmtree(extract_dir)
+                return {"error": "Invalid update package structure"}
 
-                source_dir = os.path.join(extract_dir, extracted_dirs[0])
+            source_dir = os.path.join(extract_dir, extracted_dirs[0])
 
-                return {
-                    "success": True,
-                    "source_dir": source_dir,
-                    "backup_created": True
-                }
+            return {
+                "success": True,
+                "source_dir": source_dir,
+                "backup_created": True
+            }
 
         except Exception as e:
             logger.error(f"Update preparation failed: {e}")
@@ -248,14 +252,15 @@ systemctl start yggsec-home
 
 log "Update completed successfully"
 
-# Cleanup
-rm -rf {source_dir}
+# Cleanup - remove the entire temp extraction directory
+extract_parent=$(dirname {source_dir})
+rm -rf $extract_parent
 rm -f $0
 
 # Reboot system to ensure clean state
 log "Rebooting system to complete update"
 sleep 2
-reboot
+reboot now
 """
 
             # Write update script to temporary file
