@@ -812,6 +812,7 @@ function applyUpdate(sourceDir) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'X-CSRFToken': window.csrf_token
         },
         body: JSON.stringify({
             source_dir: sourceDir
