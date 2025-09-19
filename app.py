@@ -676,10 +676,20 @@ def create_app():
         """Download update package"""
         try:
             data = request.get_json()
+            app.logger.info(f"Download request data: {data}")
+
+            if not data:
+                app.logger.error("No JSON data received")
+                return jsonify({'error': 'No data provided'}), 400
+
             download_url = data.get('download_url')
             checksum_url = data.get('checksum_url')
 
+            app.logger.info(f"Download URL: {download_url}")
+            app.logger.info(f"Checksum URL: {checksum_url}")
+
             if not download_url:
+                app.logger.error("Download URL is missing")
                 return jsonify({'error': 'Download URL required'}), 400
 
             result = update_mgr.download_update(download_url, checksum_url)
