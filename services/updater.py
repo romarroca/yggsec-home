@@ -184,47 +184,76 @@ class UpdateManager:
             return {"error": f"Update preparation failed: {str(e)}"}
 
     def apply_update(self, source_dir):
-        """Apply the prepared update"""
+        """Apply the prepared update using out-of-band systemd-run process"""
         try:
-            import shutil
+            logger.info(f"Preparing out-of-band update from source: {source_dir}")
 
-            logger.info(f"Applying update from source: {source_dir}")
+            # Create update script that runs independently
+            update_script = f"""#!/bin/bash
+set -e
 
-            # Stop services
-            logger.info("Stopping yggsec-home service...")
-            subprocess.run(['systemctl', 'stop', 'yggsec-home'], check=False)
+# Logging function
+log() {{
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | systemd-cat -t yggsec-update
+}}
 
-            # Copy new files
-            logger.info(f"Removing existing installation at {self.install_dir}")
-            if os.path.exists(self.install_dir):
-                shutil.rmtree(self.install_dir)
+log "Starting out-of-band update process"
 
-            logger.info(f"Copying files from {source_dir} to {self.install_dir}")
-            shutil.copytree(source_dir, self.install_dir)
+# Wait for API response to complete
+sleep 3
 
-            # Set permissions
-            logger.info("Setting file permissions...")
-            subprocess.run(['chown', '-R', 'root:root', self.install_dir], check=False)
-            subprocess.run(['chmod', '+x', f'{self.install_dir}/scripts/*.sh'],
-                         shell=True, check=False)
+log "Stopping yggsec-home service"
+systemctl stop yggsec-home
 
-            # Update systemd services
-            logger.info("Reloading systemd daemon...")
-            subprocess.run(['systemctl', 'daemon-reload'], check=False)
+log "Removing existing installation at {self.install_dir}"
+rm -rf {self.install_dir}
 
-            # Start services
-            logger.info("Starting yggsec-home service...")
-            subprocess.run(['systemctl', 'start', 'yggsec-home'], check=False)
+log "Copying files from {source_dir} to {self.install_dir}"
+cp -r {source_dir} {self.install_dir}
 
-            logger.info("Update applied successfully")
-            return {"success": True, "message": "Update applied successfully"}
+log "Setting file permissions"
+chown -R root:root {self.install_dir}
+chmod +x {self.install_dir}/scripts/*.sh 2>/dev/null || true
+
+log "Reloading systemd daemon"
+systemctl daemon-reload
+
+log "Starting yggsec-home service"
+systemctl start yggsec-home
+
+log "Update completed successfully"
+
+# Cleanup
+rm -rf {source_dir}
+rm -f $0
+"""
+
+            # Write update script to temporary file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as f:
+                f.write(update_script)
+                script_path = f.name
+
+            # Make script executable
+            os.chmod(script_path, 0o755)
+
+            # Launch update process using systemd-run (detached from main service)
+            logger.info("Launching out-of-band update process...")
+            subprocess.Popen([
+                'systemd-run',
+                '--scope',
+                '--unit=yggsec-update',
+                '--description=YggSec-Home Update Process',
+                script_path
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+            logger.info("Out-of-band update process started successfully")
+            return {"success": True, "message": "Update process started. System will restart shortly."}
 
         except Exception as e:
-            logger.error(f"Update application failed: {e}")
+            logger.error(f"Failed to start update process: {e}")
             import traceback
             logger.error(f"Full traceback: {traceback.format_exc()}")
-            # Attempt rollback
-            return self.rollback_update()
+            return {"error": f"Update initiation failed: {str(e)}"}
 
     def rollback_update(self):
         """Rollback to previous version"""
