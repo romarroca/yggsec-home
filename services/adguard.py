@@ -31,7 +31,7 @@ class AdGuardManager:
         """Get base URL for AdGuard, optionally using IP instead of localhost"""
         if use_ip:
             ip = self._get_local_ip()
-            return f'http://{ip}:{self.port}'
+            return f'https://{ip}:{self.port}'
         return f'http://localhost:{self.port}'
 
     def _get_auth(self):

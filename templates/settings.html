@@ -73,8 +73,8 @@
                                             <i class="bi bi-play-circle text-success me-2"></i>Start Service
                                         </a></li>
                                     {% endif %}
-                                    {% if adguard and adguard.dashboard_url %}
-                                        <li><a class="dropdown-item" href="{{ adguard.dashboard_url }}" target="_blank">
+                                    {% if adguard %}
+                                        <li><a class="dropdown-item" href="#" onclick="openAdGuardDashboard()">
                                             <i class="bi bi-box-arrow-up-right text-primary me-2"></i>Open Dashboard
                                         </a></li>
                                     {% endif %}
@@ -654,6 +654,13 @@ style.textContent = `
 }
 `;
 document.head.appendChild(style);
+
+// AdGuard Dashboard access
+function openAdGuardDashboard() {
+    const currentHost = window.location.hostname;
+    const adguardUrl = `https://${currentHost}:3000`;
+    window.open(adguardUrl, '_blank');
+}
 
 // System Update Management
 let updateInfo = null;
