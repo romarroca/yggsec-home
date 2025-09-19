@@ -244,6 +244,15 @@ log "Setting file permissions"
 chown -R root:root {self.install_dir}
 chmod +x {self.install_dir}/scripts/*.sh 2>/dev/null || true
 
+log "Creating Python virtual environment"
+cd {self.install_dir}
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+deactivate
+log "Virtual environment created successfully"
+
 log "Reloading systemd daemon"
 systemctl daemon-reload
 
