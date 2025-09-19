@@ -4,7 +4,7 @@
 set -e
 
 # Configuration
-REPO_DIR="/opt/yggsec-home"
+REPO_DIR="$(pwd)"
 BUILD_DIR="/tmp/yggsec-build"
 RELEASE_DIR="/tmp/yggsec-release"
 
@@ -45,10 +45,9 @@ usage() {
 check_requirements() {
     log_info "Checking requirements..."
 
-    # Check if running as root
+    # Check if running as root (warn but don't exit)
     if [[ $EUID -ne 0 ]]; then
-        log_error "This script must be run as root"
-        exit 1
+        log_warning "Not running as root - some operations may require sudo"
     fi
 
     # Check required tools
@@ -131,7 +130,17 @@ create_release_package() {
         --exclude='uploads/*' \
         --exclude='bandit-report.json' \
         --exclude='.pytest_cache' \
+        --exclude='requirements.txt' \
+        --include='requirements-prod.txt' \
         . "$BUILD_DIR/yggsec-home-$version/"
+
+    log_info "Ensuring requirements-prod.txt is included..."
+    if [ -f "requirements-prod.txt" ]; then
+        cp requirements-prod.txt "$BUILD_DIR/yggsec-home-$version/"
+        log_success "Production requirements file included"
+    else
+        log_warning "requirements-prod.txt not found"
+    fi
 
     # Create release archive
     cd "$BUILD_DIR"

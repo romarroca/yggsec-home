@@ -1145,14 +1145,13 @@ function pollUpdateProgress() {
                 // Update progress bar and message
                 updateProgress(progress.message, progress.percentage);
 
-                // Check if update is complete or failed
-                if (progress.step === 'rebooting' || progress.percentage >= 100) {
+                // Check if update is complete or needs reboot confirmation
+                if (progress.step === 'waiting_reboot') {
                     stopProgressPolling();
-                    // System will reboot, show final message
-                    setTimeout(() => {
-                        updateProgress('System is rebooting...', 100);
-                        // Page will disconnect due to reboot
-                    }, 1000);
+                    showRebootConfirmation();
+                } else if (progress.step === 'rebooting' || progress.percentage >= 100) {
+                    stopProgressPolling();
+                    updateProgress('System is rebooting...', 100);
                 } else if (progress.step === 'error') {
                     stopProgressPolling();
                     updateProgress('Update failed: ' + progress.message, 0, true);
@@ -1164,5 +1163,105 @@ function pollUpdateProgress() {
             // Don't stop polling on network errors during reboot
         });
 }
+
+function showRebootConfirmation() {
+    // Close progress modal
+    const progressModal = document.querySelector('.modal.show');
+    if (progressModal) {
+        bootstrap.Modal.getInstance(progressModal).hide();
+    }
+
+    // Create reboot confirmation modal
+    const rebootModal = document.createElement('div');
+    rebootModal.className = 'modal fade';
+    rebootModal.setAttribute('data-bs-backdrop', 'static');
+    rebootModal.setAttribute('data-bs-keyboard', 'false');
+    rebootModal.innerHTML = `
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        System Reboot Required
+                    </h5>
+                </div>
+                <div class="modal-body text-center">
+                    <div class="alert alert-success mb-3">
+                        <i class="bi bi-check-circle me-2"></i>
+                        <strong>Update completed successfully!</strong>
+                    </div>
+                    <p class="mb-3">The system needs to reboot to complete the update process.</p>
+                    <p class="text-muted mb-0">
+                        <i class="bi bi-info-circle me-1"></i>
+                        This will take approximately 1-2 minutes. Please do not close this page.
+                    </p>
+                </div>
+                <div class="modal-footer justify-content-center">
+                    <button type="button" class="btn btn-warning btn-lg" onclick="confirmReboot()">
+                        <i class="bi bi-power me-2"></i>
+                        Reboot System Now
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(rebootModal);
+    const modal = new bootstrap.Modal(rebootModal);
+    modal.show();
+}
+
+function confirmReboot() {
+    // Show rebooting message
+    const modalBody = document.querySelector('.modal.show .modal-body');
+    if (modalBody) {
+        modalBody.innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border text-warning mb-3" role="status">
+                    <span class="visually-hidden">Rebooting...</span>
+                </div>
+                <h5>System is rebooting...</h5>
+                <p class="text-muted mb-0">Please wait while the system restarts.</p>
+            </div>
+        `;
+    }
+
+    // Disable the button
+    const rebootBtn = document.querySelector('.modal.show .btn-warning');
+    if (rebootBtn) {
+        rebootBtn.disabled = true;
+    }
+
+    // Send confirmation to server
+    fetch('/api/system/update/confirm-reboot', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': window.csrf_token
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Set flag for post-reboot notification
+            localStorage.setItem('yggsec-update-completed', 'true');
+        }
+    })
+    .catch(error => {
+        console.error('Reboot confirmation error:', error);
+    });
+}
+
+// Check for post-reboot success notification
+document.addEventListener('DOMContentLoaded', function() {
+    if (localStorage.getItem('yggsec-update-completed') === 'true') {
+        localStorage.removeItem('yggsec-update-completed');
+
+        // Show success notification
+        setTimeout(() => {
+            showAlert('Update completed successfully! System is now running the latest version.', 'success');
+        }, 1000);
+    }
+});
 </script>
 {% endblock %}

@@ -277,16 +277,27 @@ systemctl daemon-reload
 update_progress "starting_service" 90 "Starting yggsec-home service"
 systemctl start yggsec-home
 
-update_progress "update_complete" 95 "Update completed successfully"
+update_progress "update_complete" 95 "Update completed successfully - Ready for reboot"
 
 # Cleanup - remove the entire temp extraction directory
 extract_parent=$(dirname {source_dir})
 rm -rf $extract_parent
+
+# Wait for user confirmation before rebooting
+update_progress "waiting_reboot" 98 "Waiting for user confirmation to reboot system"
+
+# Wait for reboot confirmation file
+while [ ! -f "/tmp/yggsec-reboot-confirmed" ]; do
+    sleep 1
+done
+
+# Remove confirmation file and script
+rm -f /tmp/yggsec-reboot-confirmed
 rm -f $0
 
 # Reboot system to ensure clean state
-update_progress "rebooting" 100 "Rebooting system to complete update"
-sleep 2
+update_progress "rebooting" 100 "Rebooting system now - Please wait..."
+sleep 3
 reboot now
 """
 

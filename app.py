@@ -763,6 +763,22 @@ def create_app():
             app.logger.error(f"Update progress error: {e}")
             return jsonify({'error': str(e)}), 500
 
+    @app.route('/api/system/update/confirm-reboot', methods=['POST'])
+    def confirm_reboot():
+        """Confirm system reboot after update"""
+        try:
+            # Create confirmation file for update script
+            with open('/tmp/yggsec-reboot-confirmed', 'w') as f:
+                f.write('confirmed')
+
+            return jsonify({
+                'success': True,
+                'message': 'Reboot confirmation sent'
+            })
+        except Exception as e:
+            app.logger.error(f"Reboot confirmation error: {e}")
+            return jsonify({'error': str(e)}), 500
+
     @app.route('/api/system/update/upload', methods=['POST'])
     def upload_firmware():
         """Upload local firmware file"""
