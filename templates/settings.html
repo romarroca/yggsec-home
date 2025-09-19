@@ -780,6 +780,7 @@ function downloadUpdate(downloadUrl, checksumUrl) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'X-CSRFToken': window.csrf_token
         },
         body: JSON.stringify({
             download_url: downloadUrl,
