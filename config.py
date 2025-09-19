@@ -30,7 +30,7 @@ class Config:
     ALLOWED_EXTENSIONS = {'conf'}
 
     # Security
-    BIND_HOST = '0.0.0.0'  # LAN access only via firewall
+    BIND_HOST = '127.0.0.1'  # Localhost only - nginx handles external access
     BIND_PORT = 5000
     DEBUG = False
     SESSION_TIMEOUT = timedelta(hours=12)  # 12 hour session timeout

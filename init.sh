@@ -154,6 +154,9 @@ install_system_packages() {
         log_info "WireGuard already installed, skipping"
     fi
 
+    # Nginx for SSL termination and reverse proxy
+    NGINX_PACKAGES="nginx-light openssl"  # nginx-light for minimal footprint
+
     # Optional but useful tools
     OPTIONAL_PACKAGES="wget"  # For downloading configs if needed
 
@@ -175,6 +178,15 @@ install_system_packages() {
         apt install -y $NETWORK_PACKAGES
         if [[ $? -ne 0 ]]; then
             log_warning "Some network packages failed to install, continuing..."
+        fi
+    fi
+
+    # Install nginx packages
+    if [[ -n "$NGINX_PACKAGES" ]]; then
+        log_info "Installing nginx and SSL tools: $NGINX_PACKAGES"
+        apt install -y $NGINX_PACKAGES
+        if [[ $? -ne 0 ]]; then
+            log_warning "Some nginx packages failed to install, continuing..."
         fi
     fi
 
@@ -324,8 +336,8 @@ create_adguard_config() {
 
     # Create pre-configured AdGuard Home configuration
     cat > "$ADGUARD_CONFIG_FILE" << EOF
-bind_host: 0.0.0.0
-bind_port: 3000
+bind_host: 127.0.0.1
+bind_port: 3001
 beta_bind_port: 0
 users:
   - name: yggsec
@@ -337,6 +349,12 @@ language: en
 theme: auto
 debug_pprof: false
 web_session_ttl: 720
+http:
+  pprof:
+    port: 6060
+    enabled: false
+  address: 127.0.0.1:3001
+  session_ttl: 720h
 dns:
   bind_hosts:
     - 0.0.0.0
@@ -470,6 +488,253 @@ EOF
 
     log_success "AdGuard Home pre-configured on port 3000"
     log_info "Default admin credentials: yggsec / [password set during installation]"
+}
+
+generate_ssl_certificates() {
+    log_info "Generating self-signed SSL certificates..."
+
+    local SSL_DIR="/etc/nginx/ssl"
+    mkdir -p "$SSL_DIR"
+
+    # Generate certificates for both domains
+    local DOMAINS=("home.yggsec.com" "adguard.yggsec.com")
+
+    for DOMAIN in "${DOMAINS[@]}"; do
+        local KEY_FILE="$SSL_DIR/${DOMAIN}.key"
+        local CERT_FILE="$SSL_DIR/${DOMAIN}.crt"
+
+        if [[ -f "$KEY_FILE" && -f "$CERT_FILE" ]]; then
+            log_info "SSL certificate for $DOMAIN already exists, skipping"
+            continue
+        fi
+
+        log_info "Generating certificate for $DOMAIN..."
+
+        # Generate private key
+        openssl genrsa -out "$KEY_FILE" 2048
+
+        # Generate certificate
+        openssl req -new -x509 -key "$KEY_FILE" -out "$CERT_FILE" -days 3650 -subj "/CN=$DOMAIN/O=YggSec-Home/C=US"
+
+        # Set proper permissions
+        chmod 600 "$KEY_FILE"
+        chmod 644 "$CERT_FILE"
+
+        log_success "Generated SSL certificate for $DOMAIN"
+    done
+
+    log_success "SSL certificates generated"
+}
+
+configure_nginx() {
+    log_info "Configuring nginx for SSL termination and reverse proxy..."
+
+    # Create nginx log directory (required for nginx to start)
+    log_info "Creating nginx log directory..."
+    mkdir -p /var/log/nginx
+    chown www-data:adm /var/log/nginx 2>/dev/null || chown nginx:nginx /var/log/nginx 2>/dev/null || true
+    chmod 750 /var/log/nginx
+
+    # Temporarily stop AdGuard to avoid port 3000 conflict during nginx setup
+    log_info "Temporarily stopping AdGuard to configure nginx..."
+    systemctl stop AdGuardHome 2>/dev/null || true
+
+    # Remove default nginx site
+    rm -f /etc/nginx/sites-enabled/default
+
+    # Create nginx configuration for YggSec-Home
+    cat > /etc/nginx/sites-available/yggsec-home << 'EOF'
+# YggSec-Home SSL Virtual Hosts
+
+# HTTP to HTTPS redirect for home.yggsec.com
+server {
+    listen 80;
+    server_name home.yggsec.com;
+    return 301 https://$server_name$request_uri;
+}
+
+# HTTP to HTTPS redirect for adguard.yggsec.com
+server {
+    listen 80;
+    server_name adguard.yggsec.com;
+    return 301 https://$server_name$request_uri;
+}
+
+# Catch direct port 3000 access and redirect to HTTPS
+server {
+    listen 3000;
+    server_name _;
+    return 301 https://adguard.yggsec.com$request_uri;
+}
+
+# HTTPS server for home.yggsec.com (main app)
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name home.yggsec.com;
+
+    # SSL Configuration
+    ssl_certificate /etc/nginx/ssl/home.yggsec.com.crt;
+    ssl_certificate_key /etc/nginx/ssl/home.yggsec.com.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:50m;
+
+    # Security headers
+    add_header X-Frame-Options DENY;
+    add_header X-Content-Type-Options nosniff;
+    add_header X-XSS-Protection "1; mode=block";
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # Reverse proxy to Flask app
+    location / {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    # Static files optimization
+    location /static/ {
+        proxy_pass http://127.0.0.1:5000;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+}
+
+# HTTPS server for adguard.yggsec.com (AdGuard Home)
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name adguard.yggsec.com;
+
+    # SSL Configuration
+    ssl_certificate /etc/nginx/ssl/adguard.yggsec.com.crt;
+    ssl_certificate_key /etc/nginx/ssl/adguard.yggsec.com.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:50m;
+
+    # Security headers
+    add_header X-Frame-Options DENY;
+    add_header X-Content-Type-Options nosniff;
+    add_header X-XSS-Protection "1; mode=block";
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # Reverse proxy to AdGuard Home
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+
+        # WebSocket support for AdGuard
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+}
+EOF
+
+    # Enable the site
+    ln -sf /etc/nginx/sites-available/yggsec-home /etc/nginx/sites-enabled/
+
+    # Check nginx version and adjust config if needed
+    NGINX_VERSION=$(nginx -v 2>&1 | grep -o '[0-9]\+\.[0-9]\+' | head -1)
+    log_info "Nginx version: $NGINX_VERSION"
+
+    # For nginx < 1.25.1, use old http2 syntax
+    if dpkg --compare-versions "$NGINX_VERSION" lt "1.25.1"; then
+        log_info "Using legacy http2 syntax for older nginx"
+        sed -i 's/listen 443 ssl;.*http2 on;/listen 443 ssl http2;/g' /etc/nginx/sites-available/yggsec-home
+    fi
+
+    # Test nginx configuration
+    if nginx -t; then
+        log_success "Nginx configuration is valid"
+    else
+        log_error "Nginx configuration is invalid"
+        log_info "Checking nginx logs..."
+        journalctl -u nginx --no-pager -n 20
+        exit 1
+    fi
+
+    # Configure nginx for auto-start and crash recovery
+    log_info "Configuring nginx for automatic startup and crash recovery..."
+
+    # Create systemd override directory for nginx
+    mkdir -p /etc/systemd/system/nginx.service.d/
+
+    # Create override configuration for crash recovery
+    cat > /etc/systemd/system/nginx.service.d/restart.conf << 'EOF'
+[Service]
+# Automatic restart on failure
+Restart=always
+RestartSec=5
+
+# Resource limits and security
+LimitNOFILE=65536
+LimitNPROC=32768
+
+# Process management
+KillMode=mixed
+KillSignal=SIGQUIT
+TimeoutStopSec=5
+EOF
+
+    # Reload systemd to apply override
+    systemctl daemon-reload
+
+    # Enable nginx for automatic startup
+    systemctl enable nginx
+
+    # Stop nginx if running, then start fresh
+    systemctl stop nginx 2>/dev/null || true
+    systemctl start nginx
+
+    # Verify nginx started successfully
+    if systemctl is-active --quiet nginx; then
+        log_success "Nginx started successfully with crash recovery enabled"
+        log_info "Nginx will automatically restart on failure and boot"
+    else
+        log_error "Nginx failed to start"
+        systemctl status nginx --no-pager
+        exit 1
+    fi
+
+    # Restart AdGuard Home now that nginx is configured
+    log_info "Starting AdGuard Home..."
+    systemctl start AdGuardHome
+
+    log_success "Nginx configured for SSL termination"
+    log_info "Home app: https://home.yggsec.com"
+    log_info "AdGuard:  https://adguard.yggsec.com"
+    log_info "Direct access: http://device-ip:3000 → redirects to HTTPS"
 }
 
 install_adguard_home() {
@@ -661,48 +926,56 @@ show_completion_message() {
     log_success "YggSec-Home installation completed successfully!"
     echo "=================================================================="
     echo
-    echo "🌐 Web Interface Access:"
-    echo "  Local IP:    http://$IP_ADDRESS:$WEB_PORT"
-    echo "  Hostname:    http://yggsec-home.local:$WEB_PORT"
+    echo "Web Interface Access:"
+    echo "  Home App:    https://home.yggsec.com (add to /etc/hosts: $IP_ADDRESS home.yggsec.com)"
+    echo "  AdGuard:     https://adguard.yggsec.com (add to /etc/hosts: $IP_ADDRESS adguard.yggsec.com)"
+    echo "  Legacy:      http://$IP_ADDRESS:$WEB_PORT (blocked by firewall, localhost only)"
     echo
-    echo "📋 Service Management:"
-    echo "  Status:      systemctl status yggsec-home"
-    echo "  Start:       systemctl start yggsec-home"
-    echo "  Stop:        systemctl stop yggsec-home"
-    echo "  Restart:     systemctl restart yggsec-home"
+    echo "Service Management:"
+    echo "  YggSec App:  systemctl status yggsec-home"
+    echo "  Nginx:       systemctl status nginx"
+    echo "  AdGuard:     systemctl status AdGuardHome"
+    echo "  Start All:   systemctl start yggsec-home nginx AdGuardHome"
     echo "  Logs:        journalctl -u yggsec-home -f"
     echo
-    echo "📁 Installation Directory: $INSTALL_DIR"
+    echo "Installation Directory: $INSTALL_DIR"
     echo "  Configuration: $INSTALL_DIR/config.py"
     echo "  Logs:         $INSTALL_DIR/logs/"
     echo "  Uploads:      $INSTALL_DIR/uploads/"
     echo
     if systemctl is-enabled --quiet AdGuardHome 2>/dev/null; then
-        echo "🛡️ AdGuard Home:"
-        echo "  Dashboard:   http://$IP_ADDRESS:3000"
+        echo "AdGuard Home:"
+        echo "  Dashboard:   https://adguard.yggsec.com (SSL via nginx)"
+        echo "  Direct:      http://127.0.0.1:3000 (localhost only)"
         echo "  Status:      systemctl status AdGuardHome"
         echo
     fi
 
     if command -v wg &> /dev/null; then
-        echo "🔒 WireGuard:"
+        echo "WireGuard:"
         echo "  Status:      wg show"
         echo "  Config:      Upload via YggSec-Home web interface"
         echo
     fi
-    echo "🔒 Security:"
-    echo "  - Web interface restricted to LAN access only"
+    echo "Security:"
+    echo "  - HTTPS with self-signed certificates"
+    echo "  - Web interfaces restricted to LAN access only"
     echo "  - SSH access maintained on port 22"
+    echo "  - Apps bind to localhost only (nginx proxy)"
     echo "  - Firewall configured for protection"
+    echo "  - All services auto-restart on failure"
     echo
-    echo "🚀 Next Steps:"
-    echo "  1. Access web interface using URL above"
-    echo "  2. Configure network settings if needed"
-    echo "  3. Set up AdGuard Home (if installed)"
-    echo "  4. Upload WireGuard configuration (if needed)"
-    echo "  5. Change admin password in Settings → Change Password"
+    echo "Next Steps:"
+    echo "  1. Add DNS entries to your router or /etc/hosts file:"
+    echo "     $IP_ADDRESS home.yggsec.com"
+    echo "     $IP_ADDRESS adguard.yggsec.com"
+    echo "  2. Access https://home.yggsec.com (accept self-signed cert)"
+    echo "  3. Or direct access: http://$IP_ADDRESS:3000 → redirects to HTTPS"
+    echo "  4. Configure network settings if needed"
+    echo "  5. Upload WireGuard configuration (if needed)"
+    echo "  6. Change admin password in Settings → Change Password"
     echo
-    echo "📚 Documentation:"
+    echo "Documentation:"
     echo "  README:      $INSTALL_DIR/README.md"
     echo "  GitHub:      https://github.com/romarroca/yggsec-home"
     echo
@@ -737,6 +1010,8 @@ main() {
     setup_python_environment
     prompt_for_credentials
     install_adguard_home
+    generate_ssl_certificates
+    configure_nginx
     configure_systemd_services
     setup_firewall
     start_services

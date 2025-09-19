@@ -25,7 +25,7 @@ YggSec-Home is a plug-and-play parental control solution designed for ARM SBCs r
 
 ## Quick Start
 
-### 🚀 Complete Installation (Production Ready)
+### Complete Installation (Production Ready)
 
 ```bash
 # Clone the repository
@@ -46,7 +46,7 @@ This script will:
 
 **Access**: `http://device-ip:5000` or `http://yggsec-home.local:5000`
 
-### 🏠 Production Setup (DietPi)
+### Production Setup (DietPi)
 
 ### 1. DietPi Base Setup
 
