@@ -199,8 +199,8 @@ log() {{
 
 log "Starting out-of-band update process"
 
-# Wait for API response to complete
-sleep 3
+# Wait for API response to complete and ensure detachment
+sleep 5
 
 log "Stopping yggsec-home service"
 systemctl stop yggsec-home
@@ -210,6 +210,31 @@ rm -rf {self.install_dir}
 
 log "Copying files from {source_dir} to {self.install_dir}"
 cp -r {source_dir} {self.install_dir}
+if [ $? -ne 0 ]; then
+    log "ERROR: File copy failed"
+    exit 1
+fi
+
+# Verify critical files exist after copy
+log "Verifying copy completion..."
+if [ ! -f "{self.install_dir}/app.py" ]; then
+    log "ERROR: app.py not found after copy"
+    exit 1
+fi
+if [ ! -f "{self.install_dir}/version.py" ]; then
+    log "ERROR: version.py not found after copy"
+    exit 1
+fi
+if [ ! -d "{self.install_dir}/services" ]; then
+    log "ERROR: services directory not found after copy"
+    exit 1
+fi
+if [ ! -d "{self.install_dir}/templates" ]; then
+    log "ERROR: templates directory not found after copy"
+    exit 1
+fi
+
+log "Copy verification successful - all critical files present"
 
 log "Setting file permissions"
 chown -R root:root {self.install_dir}
@@ -226,6 +251,11 @@ log "Update completed successfully"
 # Cleanup
 rm -rf {source_dir}
 rm -f $0
+
+# Reboot system to ensure clean state
+log "Rebooting system to complete update"
+sleep 2
+reboot
 """
 
             # Write update script to temporary file
@@ -241,6 +271,7 @@ rm -f $0
             subprocess.Popen([
                 'systemd-run',
                 '--scope',
+                '--no-block',
                 '--unit=yggsec-update',
                 '--description=YggSec-Home Update Process',
                 script_path
