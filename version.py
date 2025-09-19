@@ -2,8 +2,8 @@
 YggSec-Home Version Management
 """
 
-VERSION = "1.0.0"
-BUILD_DATE = "2025-09-19"
+VERSION = "1.0.1"
+BUILD_DATE = "2025-01-19"
 RELEASE_CHANNEL = "stable"  # stable, beta, dev
 
 def get_version_info():
