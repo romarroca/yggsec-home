@@ -108,6 +108,39 @@ def create_app():
     system_mgr = SystemManager()
     security_mgr = SecurityProfileManager(adguard_mgr)
 
+    # Initialize update manager
+    from services.updater import UpdateManager
+    update_mgr = UpdateManager()
+
+    # Initialize background scheduler
+    from services.scheduler import BackgroundScheduler
+    scheduler = BackgroundScheduler()
+
+    # Add periodic update check (daily at startup, then every 24 hours)
+    def check_updates_background():
+        """Background update check - logs results but doesn't interrupt user"""
+        try:
+            result = update_mgr.check_for_updates()
+            if result.get('status') == 'update_available':
+                app.logger.info(f"Update available: {result.get('current_version')} -> {result.get('latest_version')}")
+                # Store update status for UI to display notification
+                app.config['UPDATE_AVAILABLE'] = result
+            elif result.get('status') == 'up_to_date':
+                app.logger.info("System is up to date")
+                app.config['UPDATE_AVAILABLE'] = None
+            else:
+                app.logger.info(f"Update check result: {result.get('status', 'unknown')}")
+        except Exception as e:
+            app.logger.error(f"Background update check failed: {e}")
+
+    # Schedule daily update checks
+    scheduler.add_task(check_updates_background, interval_hours=24, run_immediately=True)
+    scheduler.start()
+
+    # Graceful shutdown handler
+    import atexit
+    atexit.register(lambda: scheduler.stop())
+
     # Default admin credentials (configured during installation)
     DEFAULT_USERNAME = os.environ.get('ADMIN_USERNAME', 'yggsec')
     DEFAULT_PASSWORD_HASH = os.environ.get('ADMIN_PASSWORD_HASH',
@@ -196,6 +229,7 @@ def create_app():
             return render_template('settings.html',
                                  network=None, adguard=None,
                                  wireguard=None, system=None)
+
 
     # Network Management Routes
     @app.route('/api/network/status')
@@ -625,6 +659,103 @@ def create_app():
         except Exception as e:
             app.logger.error(f"Password generation error: {e}")
             return jsonify({'success': False, 'error': str(e)}), 500
+
+    # Update Management API
+    @app.route('/api/system/update/check')
+    def check_updates():
+        """Check for available updates"""
+        try:
+            update_info = update_mgr.check_for_updates()
+            return jsonify(update_info)
+        except Exception as e:
+            app.logger.error(f"Update check error: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/system/update/download', methods=['POST'])
+    def download_update():
+        """Download update package"""
+        try:
+            data = request.get_json()
+            download_url = data.get('download_url')
+            checksum_url = data.get('checksum_url')
+
+            if not download_url:
+                return jsonify({'error': 'Download URL required'}), 400
+
+            result = update_mgr.download_update(download_url, checksum_url)
+            return jsonify(result)
+        except Exception as e:
+            app.logger.error(f"Update download error: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/system/update/apply', methods=['POST'])
+    def apply_update():
+        """Apply downloaded update"""
+        try:
+            data = request.get_json()
+            source_dir = data.get('source_dir')
+
+            if not source_dir:
+                return jsonify({'error': 'Source directory required'}), 400
+
+            result = update_mgr.apply_update(source_dir)
+            return jsonify(result)
+        except Exception as e:
+            app.logger.error(f"Update apply error: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/system/update/rollback', methods=['POST'])
+    def rollback_update():
+        """Rollback to previous version"""
+        try:
+            result = update_mgr.rollback_update()
+            return jsonify(result)
+        except Exception as e:
+            app.logger.error(f"Update rollback error: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/system/update/status')
+    def update_status():
+        """Get update status"""
+        try:
+            status = update_mgr.get_update_status()
+            return jsonify(status)
+        except Exception as e:
+            app.logger.error(f"Update status error: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/system/update/upload', methods=['POST'])
+    def upload_firmware():
+        """Upload local firmware file"""
+        try:
+            if 'firmware_file' not in request.files:
+                return jsonify({'error': 'No firmware file provided'}), 400
+
+            file = request.files['firmware_file']
+            if file.filename == '':
+                return jsonify({'error': 'No file selected'}), 400
+
+            # Validate file type
+            if not (file.filename.endswith('.tar.gz') or file.filename.endswith('.tgz')):
+                return jsonify({'error': 'Invalid file type. Only .tar.gz files are supported'}), 400
+
+            # Save uploaded file
+            import tempfile
+            import os
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.tar.gz') as temp_file:
+                file.save(temp_file.name)
+                temp_file_path = temp_file.name
+
+            # Process uploaded firmware
+            result = update_mgr._prepare_update(temp_file_path)
+
+            # Clean up temp file
+            os.unlink(temp_file_path)
+
+            return jsonify(result)
+        except Exception as e:
+            app.logger.error(f"Firmware upload error: {e}")
+            return jsonify({'error': str(e)}), 500
 
     @app.errorhandler(413)
     def too_large(e):

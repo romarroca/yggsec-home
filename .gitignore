@@ -135,3 +135,9 @@ wg*.conf
 # Local configuration overrides
 local_settings.py
 settings_local.py
+
+# Update system guides and private documentation
+UPDATE_GUIDE.md
+update-guide.md
+deployment-guide.md
+DEPLOYMENT_GUIDE.md

@@ -80,13 +80,27 @@ class SystemManager:
                                        capture_output=True, text=True, check=True)
             architecture = arch_result.stdout.strip()
 
+            # Get YggSec-Home version info
+            try:
+                from version import get_version_info
+                version_info = get_version_info()
+            except ImportError:
+                version_info = {
+                    'version': '1.0.0',
+                    'build_date': '2025-01-18',
+                    'release_channel': 'stable'
+                }
+
             return {
                 'uptime': uptime,
                 'load_average': load_avg,
                 'memory': memory,
                 'disk': disk,
                 'kernel': kernel,
-                'architecture': architecture
+                'architecture': architecture,
+                'version': version_info['version'],
+                'build_date': version_info['build_date'],
+                'release_channel': version_info['release_channel']
             }
 
         except Exception as e:
