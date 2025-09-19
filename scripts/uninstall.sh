@@ -160,10 +160,10 @@ show_completion_message() {
     log_success "YggSec-Home uninstall completed!"
     echo
     echo "What was removed:"
-    echo "  ✓ YggSec-Home application"
-    echo "  ✓ Systemd services"
-    echo "  ✓ Firewall rules"
-    echo "  ✓ Log files and uploads"
+    echo "  - YggSec-Home application"
+    echo "  - Systemd services"
+    echo "  - Firewall rules"
+    echo "  - Log files and uploads"
     echo
     echo "What remains on your system:"
     echo "  - AdGuard Home (if installed)"

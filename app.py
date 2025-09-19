@@ -27,6 +27,35 @@ def create_app():
     # Initialize configuration
     Config.init_app(app)
 
+    # Ensure nginx log directory and files exist (for system integration)
+    try:
+        import os
+        import subprocess
+        nginx_log_dir = "/var/log/nginx"
+        if not os.path.exists(nginx_log_dir):
+            os.makedirs(nginx_log_dir, mode=0o750, exist_ok=True)
+
+        # Create log files if they don't exist
+        error_log = os.path.join(nginx_log_dir, "error.log")
+        access_log = os.path.join(nginx_log_dir, "access.log")
+
+        for log_file in [error_log, access_log]:
+            if not os.path.exists(log_file):
+                open(log_file, 'a').close()
+
+        # Set proper permissions
+        try:
+            subprocess.run(['chown', '-R', 'www-data:adm', nginx_log_dir],
+                         capture_output=True, check=False)
+            subprocess.run(['chmod', '750', nginx_log_dir],
+                         capture_output=True, check=False)
+            subprocess.run(['chmod', '640', error_log, access_log],
+                         capture_output=True, check=False)
+        except:
+            pass  # Ignore permission errors
+    except Exception:
+        pass  # Don't fail app startup if nginx log setup fails
+
     # Initialize CSRF protection
     csrf = CSRFProtect(app)
 

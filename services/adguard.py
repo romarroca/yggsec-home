@@ -57,8 +57,8 @@ class AdGuardManager:
                 response = requests.get(f'{localhost_url}/control/status',
                                       timeout=5)
                 is_responding = response.status_code == 200
-            except:
-                pass
+            except Exception:
+                is_responding = False
 
             # Use IP address for dashboard URL (for external access)
             dashboard_url = self._get_base_url(use_ip=True)

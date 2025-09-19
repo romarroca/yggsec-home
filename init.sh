@@ -529,11 +529,7 @@ generate_ssl_certificates() {
 configure_nginx() {
     log_info "Configuring nginx for SSL termination and reverse proxy..."
 
-    # Create nginx log directory (required for nginx to start)
-    log_info "Creating nginx log directory..."
-    mkdir -p /var/log/nginx
-    chown www-data:adm /var/log/nginx 2>/dev/null || chown nginx:nginx /var/log/nginx 2>/dev/null || true
-    chmod 750 /var/log/nginx
+    # Note: nginx log creation is now handled automatically by the Flask app
 
     # Temporarily stop AdGuard to avoid port 3000 conflict during nginx setup
     log_info "Temporarily stopping AdGuard to configure nginx..."
@@ -693,6 +689,9 @@ EOF
     # Create override configuration for crash recovery
     cat > /etc/systemd/system/nginx.service.d/restart.conf << 'EOF'
 [Service]
+# Basic log directory creation (Flask app handles the rest)
+ExecStartPre=-/bin/mkdir -p /var/log/nginx
+
 # Automatic restart on failure
 Restart=always
 RestartSec=5
