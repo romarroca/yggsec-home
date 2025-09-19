@@ -23,7 +23,19 @@ class UpdateManager:
         """Check GitHub for latest release"""
         try:
             logger.info("Checking for updates...")
+            # Try latest release first, then include pre-releases for testing
             response = requests.get(f"{self.github_api_url}/releases/latest", timeout=10)
+
+            # If no stable release found, get the most recent release (including pre-releases)
+            if response.status_code == 404:
+                response = requests.get(f"{self.github_api_url}/releases", timeout=10)
+                if response.status_code == 200:
+                    releases = response.json()
+                    if releases:
+                        # Get the first (most recent) release
+                        latest_release = releases[0]
+                        response._content = json.dumps(latest_release).encode()
+                        response.status_code = 200
 
             if response.status_code != 200:
                 return {"error": f"GitHub API error: {response.status_code}"}
@@ -56,13 +68,26 @@ class UpdateManager:
     def _parse_assets(self, assets):
         """Parse release assets for update packages"""
         parsed_assets = []
+        checksum_files = {}
+
+        # First pass: collect checksum files
+        for asset in assets:
+            if asset["name"].endswith((".sha256", ".md5", ".sha1")):
+                # Map checksum file to its corresponding package
+                package_name = asset["name"].rsplit('.', 1)[0]  # Remove .sha256 extension
+                checksum_files[package_name] = asset["browser_download_url"]
+
+        # Second pass: collect packages and link checksums
         for asset in assets:
             if asset["name"].endswith((".tar.gz", ".zip")):
+                package_name = asset["name"].rsplit('.', 1)[0]  # Remove .tar.gz extension
+                checksum_url = checksum_files.get(package_name)
+
                 parsed_assets.append({
                     "name": asset["name"],
                     "size": asset["size"],
                     "download_url": asset["browser_download_url"],
-                    "checksum_url": None  # Will be populated if checksum file exists
+                    "checksum_url": checksum_url
                 })
         return parsed_assets
 
