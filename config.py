@@ -1,10 +1,11 @@
 import os
 import ipaddress
+import secrets
 from pathlib import Path
 from datetime import timedelta
 
 class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'yggsec-dev-key-change-in-production'
+    SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_urlsafe(32)
 
     # File paths
     BASE_DIR = Path(__file__).parent
@@ -22,8 +23,8 @@ class Config:
     # AdGuard Home
     ADGUARD_PORT = 3000
     ADGUARD_CONFIG = '/opt/AdGuardHome/AdGuardHome.yaml'
-    ADGUARD_USERNAME = os.environ.get('ADMIN_USERNAME', 'yggsec')
-    ADGUARD_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'defaultpass')
+    ADGUARD_USERNAME = os.environ.get('ADMIN_USERNAME')
+    ADGUARD_PASSWORD = os.environ.get('ADMIN_PASSWORD')
 
     # Upload restrictions
     MAX_CONTENT_LENGTH = 16 * 1024  # 16KB max for .conf files

@@ -313,7 +313,7 @@ mkdir -p logs uploads
 
 # Start development server
 export FLASK_ENV=development
-export SECRET_KEY=dev-key
+export SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
 python app.py
 ```
 

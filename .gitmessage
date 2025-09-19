@@ -1,0 +1,17 @@
+# Conventional Commit Format
+# <type>: <description>
+#
+# Types:
+# feat: new feature
+# fix: bug fix
+# sec: security fix
+# docs: documentation change
+# refactor: code refactor
+# test: add/update tests
+# chore: maintenance
+
+# Examples:
+# feat: add firewall rule persistence
+# fix: handle invalid CSR parsing
+# sec: patch command injection in parser
+# docs: update deployment instructions

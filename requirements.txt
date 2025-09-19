@@ -5,3 +5,9 @@ bcrypt==4.0.1
 Flask-WTF==1.2.1
 Flask-Limiter==3.5.0
 PyYAML==6.0.1
+
+# Development and linting tools
+flake8==6.0.0
+black==23.7.0
+isort==5.12.0
+bandit==1.7.5
