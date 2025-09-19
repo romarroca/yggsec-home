@@ -1149,6 +1149,12 @@ function pollUpdateProgress() {
                 if (progress.step === 'waiting_reboot') {
                     stopProgressPolling();
                     showRebootConfirmation();
+                } else if (progress.step === 'timeout_reboot') {
+                    stopProgressPolling();
+                    updateProgress('Timeout reached - System will reboot automatically', 98);
+                } else if (progress.step === 'confirmed_reboot') {
+                    stopProgressPolling();
+                    updateProgress('Reboot confirmed - System is rebooting...', 98);
                 } else if (progress.step === 'rebooting' || progress.percentage >= 100) {
                     stopProgressPolling();
                     updateProgress('System is rebooting...', 100);

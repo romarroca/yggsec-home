@@ -274,22 +274,34 @@ update_progress "venv_complete" 80 "Virtual environment and dependencies install
 update_progress "reloading_systemd" 85 "Reloading systemd daemon"
 systemctl daemon-reload
 
-update_progress "starting_service" 90 "Starting yggsec-home service"
-systemctl start yggsec-home
-
-update_progress "update_complete" 95 "Update completed successfully - Ready for reboot"
+update_progress "update_complete" 90 "Update completed successfully - Ready for reboot"
 
 # Cleanup - remove the entire temp extraction directory
 extract_parent=$(dirname {source_dir})
 rm -rf $extract_parent
 
 # Wait for user confirmation before rebooting
-update_progress "waiting_reboot" 98 "Waiting for user confirmation to reboot system"
+update_progress "waiting_reboot" 95 "Waiting for user confirmation to reboot system (30 seconds timeout)"
 
-# Wait for reboot confirmation file
-while [ ! -f "/tmp/yggsec-reboot-confirmed" ]; do
+# Wait for reboot confirmation file with 30-second timeout
+TIMEOUT=30
+COUNTER=0
+while [ ! -f "/tmp/yggsec-reboot-confirmed" ] && [ $COUNTER -lt $TIMEOUT ]; do
     sleep 1
+    COUNTER=$((COUNTER + 1))
 done
+
+# Check if timeout reached and prepare for reboot
+if [ $COUNTER -ge $TIMEOUT ]; then
+    update_progress "timeout_reboot" 98 "No user confirmation received - Starting service and rebooting"
+else
+    update_progress "confirmed_reboot" 98 "User confirmation received - Starting service and rebooting"
+fi
+
+# Start service briefly before reboot (for cleanup and final state)
+update_progress "final_start" 99 "Starting service for final cleanup"
+systemctl start yggsec-home
+sleep 2
 
 # Remove confirmation file and script
 rm -f /tmp/yggsec-reboot-confirmed
