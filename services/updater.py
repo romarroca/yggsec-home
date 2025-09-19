@@ -196,23 +196,31 @@ class UpdateManager:
             update_script = f"""#!/bin/bash
 set -e
 
-# Logging function
+# Progress tracking file
+PROGRESS_FILE="/tmp/yggsec-update-progress.json"
+
+# Logging and progress function
 log() {{
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | systemd-cat -t yggsec-update
 }}
 
-log "Starting out-of-band update process"
+update_progress() {{
+    echo "{{\\"step\\": \\"$1\\", \\"percentage\\": $2, \\"message\\": \\"$3\\", \\"timestamp\\": \\"$(date '+%Y-%m-%d %H:%M:%S')\\" }}" > $PROGRESS_FILE
+    log "$3"
+}}
+
+update_progress "initializing" 5 "Starting out-of-band update process"
 
 # Wait for API response to complete and ensure detachment
 sleep 5
 
-log "Stopping yggsec-home service"
+update_progress "stopping_service" 10 "Stopping yggsec-home service"
 systemctl stop yggsec-home
 
-log "Removing existing installation at {self.install_dir}"
+update_progress "removing_old" 15 "Removing existing installation"
 rm -rf {self.install_dir}
 
-log "Copying files from {source_dir} to {self.install_dir}"
+update_progress "copying_files" 20 "Copying files from source to installation directory"
 cp -r {source_dir} {self.install_dir}
 if [ $? -ne 0 ]; then
     log "ERROR: File copy failed"
@@ -220,7 +228,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # Verify critical files exist after copy
-log "Verifying copy completion..."
+update_progress "verifying_copy" 30 "Verifying copy completion..."
 if [ ! -f "{self.install_dir}/app.py" ]; then
     log "ERROR: app.py not found after copy"
     exit 1
@@ -238,28 +246,38 @@ if [ ! -d "{self.install_dir}/templates" ]; then
     exit 1
 fi
 
-log "Copy verification successful - all critical files present"
+update_progress "copy_verified" 35 "Copy verification successful - all critical files present"
 
-log "Setting file permissions"
+update_progress "setting_permissions" 40 "Setting file permissions"
 chown -R root:root {self.install_dir}
 chmod +x {self.install_dir}/scripts/*.sh 2>/dev/null || true
 
-log "Creating Python virtual environment"
+update_progress "creating_venv" 45 "Creating Python virtual environment (this may take 2-3 minutes)"
 cd {self.install_dir}
 python3 -m venv venv
-source venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-deactivate
-log "Virtual environment created successfully"
+if [ $? -ne 0 ]; then
+    log "ERROR: Failed to create virtual environment"
+    exit 1
+fi
 
-log "Reloading systemd daemon"
+update_progress "installing_deps" 65 "Installing Python dependencies"
+source venv/bin/activate
+pip install --upgrade pip --quiet
+pip install --only-binary=all -r requirements-prod.txt --quiet || pip install -r requirements-prod.txt --quiet
+if [ $? -ne 0 ]; then
+    log "ERROR: Failed to install dependencies"
+    exit 1
+fi
+deactivate
+update_progress "venv_complete" 80 "Virtual environment and dependencies installed successfully"
+
+update_progress "reloading_systemd" 85 "Reloading systemd daemon"
 systemctl daemon-reload
 
-log "Starting yggsec-home service"
+update_progress "starting_service" 90 "Starting yggsec-home service"
 systemctl start yggsec-home
 
-log "Update completed successfully"
+update_progress "update_complete" 95 "Update completed successfully"
 
 # Cleanup - remove the entire temp extraction directory
 extract_parent=$(dirname {source_dir})
@@ -267,7 +285,7 @@ rm -rf $extract_parent
 rm -f $0
 
 # Reboot system to ensure clean state
-log "Rebooting system to complete update"
+update_progress "rebooting" 100 "Rebooting system to complete update"
 sleep 2
 reboot now
 """

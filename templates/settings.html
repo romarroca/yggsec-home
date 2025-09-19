@@ -769,8 +769,9 @@ function startUpdate() {
     // Show progress
     showUpdateProgress();
 
-    // Start download
+    // Start download and progress monitoring
     downloadUpdate(downloadUrl, checksumUrl);
+    startProgressPolling();
 }
 
 function downloadUpdate(downloadUrl, checksumUrl) {
@@ -1113,5 +1114,55 @@ settingsStyle.textContent = `
 }
 `;
 document.head.appendChild(settingsStyle);
+
+// Progress polling functions
+let progressPollingInterval = null;
+
+function startProgressPolling() {
+    // Clear any existing interval
+    if (progressPollingInterval) {
+        clearInterval(progressPollingInterval);
+    }
+
+    // Poll every 2 seconds
+    progressPollingInterval = setInterval(pollUpdateProgress, 2000);
+}
+
+function stopProgressPolling() {
+    if (progressPollingInterval) {
+        clearInterval(progressPollingInterval);
+        progressPollingInterval = null;
+    }
+}
+
+function pollUpdateProgress() {
+    fetch('/api/system/update/progress')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.progress) {
+                const progress = data.progress;
+
+                // Update progress bar and message
+                updateProgress(progress.message, progress.percentage);
+
+                // Check if update is complete or failed
+                if (progress.step === 'rebooting' || progress.percentage >= 100) {
+                    stopProgressPolling();
+                    // System will reboot, show final message
+                    setTimeout(() => {
+                        updateProgress('System is rebooting...', 100);
+                        // Page will disconnect due to reboot
+                    }, 1000);
+                } else if (progress.step === 'error') {
+                    stopProgressPolling();
+                    updateProgress('Update failed: ' + progress.message, 0, true);
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Progress polling error:', error);
+            // Don't stop polling on network errors during reboot
+        });
+}
 </script>
 {% endblock %}

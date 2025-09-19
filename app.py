@@ -734,6 +734,35 @@ def create_app():
             app.logger.error(f"Update status error: {e}")
             return jsonify({'error': str(e)}), 500
 
+    @app.route('/api/system/update/progress')
+    def update_progress():
+        """Get current update progress"""
+        try:
+            import json
+            import os
+            progress_file = "/tmp/yggsec-update-progress.json"
+
+            if os.path.exists(progress_file):
+                with open(progress_file, 'r') as f:
+                    progress_data = json.load(f)
+                return jsonify({
+                    'success': True,
+                    'progress': progress_data
+                })
+            else:
+                return jsonify({
+                    'success': True,
+                    'progress': {
+                        'step': 'idle',
+                        'percentage': 0,
+                        'message': 'No update in progress',
+                        'timestamp': ''
+                    }
+                })
+        except Exception as e:
+            app.logger.error(f"Update progress error: {e}")
+            return jsonify({'error': str(e)}), 500
+
     @app.route('/api/system/update/upload', methods=['POST'])
     def upload_firmware():
         """Upload local firmware file"""
