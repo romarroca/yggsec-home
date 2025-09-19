@@ -542,32 +542,59 @@ configure_nginx() {
     cat > /etc/nginx/sites-available/yggsec-home << 'EOF'
 # YggSec-Home SSL Virtual Hosts
 
-# HTTP to HTTPS redirect for home.yggsec.com
+# HTTP to HTTPS redirect for any hostname/IP
 server {
     listen 80;
-    server_name home.yggsec.com;
-    return 301 https://$server_name$request_uri;
-}
-
-# HTTP to HTTPS redirect for adguard.yggsec.com
-server {
-    listen 80;
-    server_name adguard.yggsec.com;
-    return 301 https://$server_name$request_uri;
-}
-
-# Catch direct port 3000 access and redirect to HTTPS
-server {
-    listen 3000;
     server_name _;
-    return 301 https://adguard.yggsec.com$request_uri;
+    return 301 https://$host$request_uri;
 }
 
-# HTTPS server for home.yggsec.com (main app)
+# HTTPS server for direct AdGuard access on port 3000
+server {
+    listen 3000 ssl;
+    http2 on;
+    server_name _;
+
+    # SSL Configuration (using AdGuard certificate)
+    ssl_certificate /etc/nginx/ssl/adguard.yggsec.com.crt;
+    ssl_certificate_key /etc/nginx/ssl/adguard.yggsec.com.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:50m;
+
+    # Security headers
+    add_header X-Frame-Options DENY;
+    add_header X-Content-Type-Options nosniff;
+    add_header X-XSS-Protection "1; mode=block";
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # Direct proxy to AdGuard Home
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket support for AdGuard
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+}
+
+# HTTPS server for YggSec-Home (port 443 - main app)
 server {
     listen 443 ssl;
     http2 on;
-    server_name home.yggsec.com;
+    server_name _;
 
     # SSL Configuration
     ssl_certificate /etc/nginx/ssl/home.yggsec.com.crt;
@@ -610,49 +637,6 @@ server {
         proxy_pass http://127.0.0.1:5000;
         expires 1y;
         add_header Cache-Control "public, immutable";
-    }
-}
-
-# HTTPS server for adguard.yggsec.com (AdGuard Home)
-server {
-    listen 443 ssl;
-    http2 on;
-    server_name adguard.yggsec.com;
-
-    # SSL Configuration
-    ssl_certificate /etc/nginx/ssl/adguard.yggsec.com.crt;
-    ssl_certificate_key /etc/nginx/ssl/adguard.yggsec.com.key;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers on;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
-    ssl_session_timeout 1d;
-    ssl_session_cache shared:SSL:50m;
-
-    # Security headers
-    add_header X-Frame-Options DENY;
-    add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-
-    # Reverse proxy to AdGuard Home
-    location / {
-        proxy_pass http://127.0.0.1:3001;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host $host;
-        proxy_set_header X-Forwarded-Port $server_port;
-
-        # WebSocket support for AdGuard
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-
-        # Timeouts
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
     }
 }
 EOF

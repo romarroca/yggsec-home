@@ -311,9 +311,14 @@ update_progress "replacing_files" 98 "Replacing installation files"
 rm -rf {self.install_dir}
 mv $STAGING_DIR {self.install_dir}
 
-update_progress "final_start" 99 "Starting service for final cleanup"
+update_progress "final_start" 99 "Starting services for final cleanup"
 systemctl start yggsec-home
 sleep 2
+
+# Restart AdGuard Home to ensure it's running with any config changes
+log "Restarting AdGuard Home service"
+systemctl restart AdGuardHome 2>/dev/null || true
+sleep 1
 
 # Remove confirmation file and script
 rm -f /tmp/yggsec-reboot-confirmed

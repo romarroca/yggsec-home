@@ -110,6 +110,7 @@ Thumbs.db
 tmp/
 temp/
 .tmp/
+temp.nginx
 
 # Security sensitive files
 config.local.py
