@@ -373,7 +373,9 @@ dns:
   upstream_dns:
     - 127.0.0.1:5353
   upstream_dns_file: ""
-  bootstrap_dns: []
+  bootstrap_dns:
+    - 9.9.9.9
+    - 149.112.112.112
   all_servers: false
   fastest_addr: false
   fastest_timeout: 1s
@@ -715,76 +717,6 @@ EOF
     log_info "Direct access: http://device-ip:3000 → redirects to HTTPS"
 }
 
-install_and_configure_unbound() {
-    log_info "Installing and configuring Unbound DNS resolver..."
-
-    # Check if Unbound is already installed
-    if command -v unbound &> /dev/null; then
-        log_success "Unbound already installed"
-    else
-        log_info "Installing Unbound using DietPi-software..."
-
-        if [[ "$IS_DIETPI" == true ]]; then
-            # Use DietPi-software automation (non-interactive)
-            # Software ID 182 = Unbound
-            dietpi-software install 182
-        else
-            # Fallback to apt for non-DietPi systems
-            apt install -y unbound
-        fi
-
-        log_success "Unbound installed"
-    fi
-
-    # Create Unbound configuration directory if needed
-    mkdir -p /etc/unbound/unbound.conf.d
-
-    # Create minimal YggSec-specific Unbound configuration
-    # This overrides port and interface only, letting DietPi defaults handle the rest
-    log_info "Configuring Unbound for localhost-only access on port 5353..."
-    cat > /etc/unbound/unbound.conf.d/yggsec-unbound.conf << 'EOFUNBOUND'
-# YggSec-Home Unbound Configuration
-# Minimal config to work with AdGuard Home
-
-server:
-    # Listen on localhost only, port 5353 (AdGuard uses 53)
-    interface: 127.0.0.1
-    port: 5353
-
-    # Access control - localhost only
-    access-control: 0.0.0.0/0 refuse
-    access-control: 127.0.0.0/8 allow
-EOFUNBOUND
-
-    # Test Unbound configuration
-    if unbound-checkconf; then
-        log_success "Unbound configuration is valid"
-    else
-        log_error "Unbound configuration is invalid"
-        log_error "Running unbound-checkconf for details:"
-        unbound-checkconf
-        exit 1
-    fi
-
-    # Enable and start Unbound
-    systemctl enable unbound
-    systemctl restart unbound
-
-    # Wait for Unbound to start
-    sleep 3
-
-    # Verify Unbound is running
-    if systemctl is-active --quiet unbound; then
-        log_success "Unbound started successfully on 127.0.0.1:5353"
-        log_info "Unbound provides recursive DNS with DNSSEC validation"
-    else
-        log_error "Failed to start Unbound"
-        log_error "Checking service status:"
-        systemctl status unbound --no-pager
-        exit 1
-    fi
-}
-
 install_adguard_home() {
     log_info "Checking AdGuard Home installation..."
 
@@ -984,8 +916,7 @@ show_completion_message() {
     echo "  YggSec App:  systemctl status yggsec-home"
     echo "  Nginx:       systemctl status nginx"
     echo "  AdGuard:     systemctl status AdGuardHome"
-    echo "  Unbound:     systemctl status unbound"
-    echo "  Start All:   systemctl start yggsec-home nginx AdGuardHome unbound"
+    echo "  Start All:   systemctl start yggsec-home nginx AdGuardHome"
     echo "  Logs:        journalctl -u yggsec-home -f"
     echo
     echo "Installation Directory: $INSTALL_DIR"
@@ -1016,12 +947,12 @@ show_completion_message() {
         echo "  Config:      Upload via YggSec-Home web interface"
         echo
     fi
-    echo "DNS Resolution Chain:"
-    echo "  Clients → AdGuard (ad blocking, port 53)"
-    echo "          ↓"
-    echo "  Unbound (recursive DNS, DNSSEC, port 5353)"
-    echo "          ↓"
-    echo "  Root DNS Servers (maximum privacy)"
+    echo "DNS Configuration:"
+    echo "  AdGuard DNS:     Port 53 (clients point here)"
+    echo "  Upstream DNS:    127.0.0.1:5353 (configure Unbound to listen here)"
+    echo "  Bootstrap DNS:   Quad9 (9.9.9.9, 149.112.112.112)"
+    echo
+    echo "Optional: Install Unbound for recursive DNS with maximum privacy"
     echo
     echo "Security:"
     echo "  - HTTPS with self-signed certificates"
@@ -1075,7 +1006,6 @@ main() {
     copy_application_files
     setup_python_environment
     prompt_for_credentials
-    install_and_configure_unbound
     install_adguard_home
     generate_ssl_certificates
     configure_nginx
