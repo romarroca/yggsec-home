@@ -807,6 +807,7 @@ Environment=FLASK_APP=app.py
 Environment=FLASK_ENV=production
 Environment=SECRET_KEY=$SECRET_KEY
 Environment=ADMIN_USERNAME=$ADMIN_USERNAME
+Environment=ADMIN_PASSWORD=$ADMIN_PASSWORD
 Environment=ADMIN_PASSWORD_HASH=$ADMIN_PASSWORD_HASH
 ExecStart=$INSTALL_DIR/venv/bin/python app.py
 ExecReload=/bin/kill -HUP \$MAINPID

@@ -21,7 +21,7 @@ class Config:
     WG_INTERFACE = 'wg0'
 
     # AdGuard Home
-    ADGUARD_PORT = 3000
+    ADGUARD_PORT = 3001  # Direct connection to AdGuard (localhost only)
     ADGUARD_CONFIG = '/opt/AdGuardHome/AdGuardHome.yaml'
     ADGUARD_USERNAME = os.environ.get('ADMIN_USERNAME')
     ADGUARD_PASSWORD = os.environ.get('ADMIN_PASSWORD')

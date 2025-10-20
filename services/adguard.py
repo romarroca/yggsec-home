@@ -55,6 +55,7 @@ class AdGuardManager:
             localhost_url = self._get_base_url(use_ip=False)
             try:
                 response = requests.get(f'{localhost_url}/control/status',
+                                      auth=self._get_auth(),
                                       timeout=5)
                 is_responding = response.status_code == 200
             except Exception:
@@ -130,6 +131,7 @@ class AdGuardManager:
         try:
             localhost_url = self._get_base_url(use_ip=False)
             response = requests.get(f'{localhost_url}/control/stats',
+                                  auth=self._get_auth(),
                                   timeout=5)
             if response.status_code == 200:
                 return response.json()
@@ -142,6 +144,7 @@ class AdGuardManager:
         try:
             localhost_url = self._get_base_url(use_ip=False)
             response = requests.get(f'{localhost_url}/control/querylog_config',
+                                  auth=self._get_auth(),
                                   timeout=5)
             if response.status_code == 200:
                 return response.json()
@@ -160,6 +163,7 @@ class AdGuardManager:
                 params['limit'] = limit
 
             response = requests.get(f'{localhost_url}/control/querylog',
+                                  auth=self._get_auth(),
                                   params=params, timeout=10)
             if response.status_code == 200:
                 return response.json()
@@ -172,6 +176,7 @@ class AdGuardManager:
         try:
             localhost_url = self._get_base_url(use_ip=False)
             response = requests.get(f'{localhost_url}/control/stats_info',
+                                  auth=self._get_auth(),
                                   timeout=5)
             if response.status_code == 200:
                 return response.json()
@@ -184,6 +189,7 @@ class AdGuardManager:
         try:
             localhost_url = self._get_base_url(use_ip=False)
             response = requests.get(f'{localhost_url}/control/stats_history',
+                                  auth=self._get_auth(),
                                   timeout=5)
             if response.status_code == 200:
                 return response.json()
@@ -193,36 +199,48 @@ class AdGuardManager:
             return None
 
     def get_top_blocked_domains(self):
+        """Get top blocked domains from the main stats endpoint"""
         try:
-            localhost_url = self._get_base_url(use_ip=False)
-            response = requests.get(f'{localhost_url}/control/stats/top_blocked_domains',
-                                  timeout=5)
-            if response.status_code == 200:
-                return response.json()
+            stats = self.get_stats()
+            if stats and 'top_blocked_domains' in stats:
+                # Convert list of dicts to a single dict
+                top_blocked = {}
+                for item in stats['top_blocked_domains']:
+                    if isinstance(item, dict):
+                        top_blocked.update(item)
+                return top_blocked
             return None
         except Exception as e:
             logger.error(f"Failed to get top blocked domains: {e}")
             return None
 
     def get_top_clients(self):
+        """Get top clients from the main stats endpoint"""
         try:
-            localhost_url = self._get_base_url(use_ip=False)
-            response = requests.get(f'{localhost_url}/control/stats/top_clients',
-                                  timeout=5)
-            if response.status_code == 200:
-                return response.json()
+            stats = self.get_stats()
+            if stats and 'top_clients' in stats:
+                # Convert list of dicts to a single dict
+                top_clients = {}
+                for item in stats['top_clients']:
+                    if isinstance(item, dict):
+                        top_clients.update(item)
+                return top_clients
             return None
         except Exception as e:
             logger.error(f"Failed to get top clients: {e}")
             return None
 
     def get_top_queried_domains(self):
+        """Get top queried domains from the main stats endpoint"""
         try:
-            localhost_url = self._get_base_url(use_ip=False)
-            response = requests.get(f'{localhost_url}/control/stats/top_queried_domains',
-                                  timeout=5)
-            if response.status_code == 200:
-                return response.json()
+            stats = self.get_stats()
+            if stats and 'top_queried_domains' in stats:
+                # Convert list of dicts to a single dict
+                top_queried = {}
+                for item in stats['top_queried_domains']:
+                    if isinstance(item, dict):
+                        top_queried.update(item)
+                return top_queried
             return None
         except Exception as e:
             logger.error(f"Failed to get top queried domains: {e}")
