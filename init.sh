@@ -722,10 +722,16 @@ install_and_configure_unbound() {
     if command -v unbound &> /dev/null; then
         log_success "Unbound already installed"
     else
-        log_info "Installing Unbound..."
+        log_info "Installing Unbound using DietPi-software..."
 
-        # Install Unbound using standard apt (works on DietPi and Debian)
-        apt install -y unbound
+        if [[ "$IS_DIETPI" == true ]]; then
+            # Use DietPi-software automation (non-interactive)
+            # Software ID 182 = Unbound
+            dietpi-software install 182
+        else
+            # Fallback to apt for non-DietPi systems
+            apt install -y unbound
+        fi
 
         log_success "Unbound installed"
     fi
@@ -733,11 +739,12 @@ install_and_configure_unbound() {
     # Create Unbound configuration directory if needed
     mkdir -p /etc/unbound/unbound.conf.d
 
-    # Create YggSec-specific Unbound configuration
+    # Create minimal YggSec-specific Unbound configuration
+    # This overrides port and interface only, letting DietPi defaults handle the rest
     log_info "Configuring Unbound for localhost-only access on port 5353..."
     cat > /etc/unbound/unbound.conf.d/yggsec-unbound.conf << 'EOFUNBOUND'
 # YggSec-Home Unbound Configuration
-# Optimized for privacy and performance as AdGuard Home upstream resolver
+# Minimal config to work with AdGuard Home
 
 server:
     # Listen on localhost only, port 5353 (AdGuard uses 53)
@@ -747,56 +754,6 @@ server:
     # Access control - localhost only
     access-control: 0.0.0.0/0 refuse
     access-control: 127.0.0.0/8 allow
-    access-control: ::/0 refuse
-    access-control: ::1/128 allow
-
-    # Do not daemonize (systemd manages this)
-    do-daemonize: no
-
-    # Performance tuning for home use
-    num-threads: 1
-    msg-cache-size: 50m
-    rrset-cache-size: 100m
-    cache-min-ttl: 300
-    cache-max-ttl: 86400
-
-    # Privacy settings
-    hide-identity: yes
-    hide-version: yes
-    qname-minimisation: yes
-    minimal-responses: yes
-    use-caps-for-id: yes
-    rrset-roundrobin: yes
-
-    # DNSSEC validation (trust anchor configured in root-auto-trust-anchor-file.conf)
-    harden-glue: yes
-    harden-dnssec-stripped: yes
-    harden-algo-downgrade: yes
-    harden-large-queries: yes
-    harden-short-bufsize: yes
-
-    # Prefetch popular domains
-    prefetch: yes
-    prefetch-key: yes
-    serve-expired: yes
-
-    # Logging (minimal for privacy)
-    verbosity: 0
-    log-queries: no
-    log-replies: no
-
-    # Protocol settings
-    do-udp: yes
-    do-tcp: yes
-    do-ip4: yes
-    do-ip6: no
-
-    # Security
-    unwanted-reply-threshold: 10000
-    ratelimit: 1000
-
-    # EDNS settings
-    edns-buffer-size: 1232
 EOFUNBOUND
 
     # Test Unbound configuration
@@ -804,6 +761,7 @@ EOFUNBOUND
         log_success "Unbound configuration is valid"
     else
         log_error "Unbound configuration is invalid"
+        log_error "Running unbound-checkconf for details:"
         unbound-checkconf
         exit 1
     fi
@@ -813,14 +771,15 @@ EOFUNBOUND
     systemctl restart unbound
 
     # Wait for Unbound to start
-    sleep 2
+    sleep 3
 
     # Verify Unbound is running
     if systemctl is-active --quiet unbound; then
         log_success "Unbound started successfully on 127.0.0.1:5353"
-        log_info "Unbound will provide recursive DNS with DNSSEC validation"
+        log_info "Unbound provides recursive DNS with DNSSEC validation"
     else
         log_error "Failed to start Unbound"
+        log_error "Checking service status:"
         systemctl status unbound --no-pager
         exit 1
     fi
