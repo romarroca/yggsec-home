@@ -817,8 +817,19 @@ EOFUNBOUND
     # Initialize trust anchor for DNSSEC if not exists
     if [[ ! -f /var/lib/unbound/root.key ]]; then
         log_info "Initializing DNSSEC trust anchor..."
-        unbound-anchor -a /var/lib/unbound/root.key || \
-            log_warning "Failed to initialize trust anchor, Unbound will create it on first start"
+        if command -v unbound-anchor &> /dev/null; then
+            unbound-anchor -a /var/lib/unbound/root.key || \
+                log_warning "unbound-anchor failed, creating placeholder file"
+        else
+            log_info "unbound-anchor not available, creating placeholder file"
+        fi
+
+        # If still doesn't exist, create an empty file - Unbound will populate it on first start
+        if [[ ! -f /var/lib/unbound/root.key ]]; then
+            touch /var/lib/unbound/root.key
+            chown unbound:unbound /var/lib/unbound/root.key
+            log_info "Created empty root.key - Unbound will populate on first start"
+        fi
     fi
 
     # Test Unbound configuration
