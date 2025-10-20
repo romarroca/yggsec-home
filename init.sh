@@ -371,14 +371,9 @@ dns:
   ratelimit_whitelist: []
   refuse_any: true
   upstream_dns:
-    - https://dns10.quad9.net/dns-query
-    - https://dns.cloudflare.com/dns-query
+    - 127.0.0.1:5353
   upstream_dns_file: ""
-  bootstrap_dns:
-    - 9.9.9.10
-    - 149.112.112.10
-    - 2620:fe::10
-    - 2620:fe::fe:10
+  bootstrap_dns: []
   all_servers: false
   fastest_addr: false
   fastest_timeout: 1s
@@ -720,6 +715,146 @@ EOF
     log_info "Direct access: http://device-ip:3000 → redirects to HTTPS"
 }
 
+install_and_configure_unbound() {
+    log_info "Installing and configuring Unbound DNS resolver..."
+
+    # Check if Unbound is already installed
+    if command -v unbound &> /dev/null; then
+        log_success "Unbound already installed"
+    else
+        log_info "Installing Unbound..."
+
+        # Install Unbound
+        if [[ "$IS_DIETPI" == true ]]; then
+            # Use dietpi-software for DietPi
+            log_info "Using dietpi-software to install Unbound..."
+            G_AGI unbound
+        else
+            # Standard apt install
+            apt install -y unbound
+        fi
+
+        log_success "Unbound installed"
+    fi
+
+    # Create Unbound configuration directory if needed
+    mkdir -p /etc/unbound/unbound.conf.d
+    mkdir -p /var/lib/unbound
+
+    # Download root hints for recursive DNS
+    log_info "Downloading DNS root hints..."
+    if [[ ! -f /var/lib/unbound/root.hints ]] || [[ $(find /var/lib/unbound/root.hints -mtime +30 2>/dev/null) ]]; then
+        wget -q -O /var/lib/unbound/root.hints https://www.internic.net/domain/named.root || \
+            log_warning "Failed to download root hints, will use built-in"
+    fi
+
+    # Create YggSec-specific Unbound configuration
+    log_info "Configuring Unbound for localhost-only access on port 5353..."
+    cat > /etc/unbound/unbound.conf.d/yggsec-unbound.conf << 'EOFUNBOUND'
+# YggSec-Home Unbound Configuration
+# Optimized for privacy and performance as AdGuard Home upstream resolver
+
+server:
+    # Listen on localhost only, port 5353 (AdGuard uses 53)
+    interface: 127.0.0.1
+    port: 5353
+
+    # Access control - localhost only
+    access-control: 0.0.0.0/0 refuse
+    access-control: 127.0.0.0/8 allow
+    access-control: ::/0 refuse
+    access-control: ::1/128 allow
+
+    # Do not daemonize (systemd manages this)
+    do-daemonize: no
+
+    # Performance tuning for home use
+    num-threads: 1
+    msg-cache-size: 50m
+    rrset-cache-size: 100m
+    cache-min-ttl: 300
+    cache-max-ttl: 86400
+
+    # Privacy settings
+    hide-identity: yes
+    hide-version: yes
+    qname-minimisation: yes
+    minimal-responses: yes
+    use-caps-for-id: yes
+    rrset-roundrobin: yes
+
+    # DNSSEC validation
+    auto-trust-anchor-file: "/var/lib/unbound/root.key"
+    harden-glue: yes
+    harden-dnssec-stripped: yes
+    harden-algo-downgrade: yes
+    harden-large-queries: yes
+    harden-short-bufsize: yes
+
+    # Prefetch popular domains
+    prefetch: yes
+    prefetch-key: yes
+    serve-expired: yes
+
+    # Logging (minimal for privacy)
+    verbosity: 0
+    log-queries: no
+    log-replies: no
+
+    # Protocol settings
+    do-udp: yes
+    do-tcp: yes
+    do-ip4: yes
+    do-ip6: no
+
+    # Security
+    unwanted-reply-threshold: 10000
+    ratelimit: 1000
+
+    # EDNS settings
+    edns-buffer-size: 1232
+
+    # Root hints file
+    root-hints: "/var/lib/unbound/root.hints"
+EOFUNBOUND
+
+    # Set proper ownership
+    chown -R unbound:unbound /var/lib/unbound 2>/dev/null || true
+
+    # Initialize trust anchor for DNSSEC if not exists
+    if [[ ! -f /var/lib/unbound/root.key ]]; then
+        log_info "Initializing DNSSEC trust anchor..."
+        unbound-anchor -a /var/lib/unbound/root.key || \
+            log_warning "Failed to initialize trust anchor, Unbound will create it on first start"
+    fi
+
+    # Test Unbound configuration
+    if unbound-checkconf; then
+        log_success "Unbound configuration is valid"
+    else
+        log_error "Unbound configuration is invalid"
+        unbound-checkconf
+        exit 1
+    fi
+
+    # Enable and start Unbound
+    systemctl enable unbound
+    systemctl restart unbound
+
+    # Wait for Unbound to start
+    sleep 2
+
+    # Verify Unbound is running
+    if systemctl is-active --quiet unbound; then
+        log_success "Unbound started successfully on 127.0.0.1:5353"
+        log_info "Unbound will provide recursive DNS with DNSSEC validation"
+    else
+        log_error "Failed to start Unbound"
+        systemctl status unbound --no-pager
+        exit 1
+    fi
+}
+
 install_adguard_home() {
     log_info "Checking AdGuard Home installation..."
 
@@ -919,7 +1054,8 @@ show_completion_message() {
     echo "  YggSec App:  systemctl status yggsec-home"
     echo "  Nginx:       systemctl status nginx"
     echo "  AdGuard:     systemctl status AdGuardHome"
-    echo "  Start All:   systemctl start yggsec-home nginx AdGuardHome"
+    echo "  Unbound:     systemctl status unbound"
+    echo "  Start All:   systemctl start yggsec-home nginx AdGuardHome unbound"
     echo "  Logs:        journalctl -u yggsec-home -f"
     echo
     echo "Installation Directory: $INSTALL_DIR"
@@ -935,12 +1071,28 @@ show_completion_message() {
         echo
     fi
 
+    if command -v unbound &> /dev/null; then
+        echo "Unbound DNS Resolver:"
+        echo "  Status:      systemctl status unbound"
+        echo "  Stats:       sudo unbound-control stats_noreset"
+        echo "  Listening:   127.0.0.1:5353 (localhost only)"
+        echo "  Mode:        Recursive resolver with DNSSEC validation"
+        echo
+    fi
+
     if command -v wg &> /dev/null; then
         echo "WireGuard:"
         echo "  Status:      wg show"
         echo "  Config:      Upload via YggSec-Home web interface"
         echo
     fi
+    echo "DNS Resolution Chain:"
+    echo "  Clients → AdGuard (ad blocking, port 53)"
+    echo "          ↓"
+    echo "  Unbound (recursive DNS, DNSSEC, port 5353)"
+    echo "          ↓"
+    echo "  Root DNS Servers (maximum privacy)"
+    echo
     echo "Security:"
     echo "  - HTTPS with self-signed certificates"
     echo "  - Web interfaces restricted to LAN access only"
@@ -993,6 +1145,7 @@ main() {
     copy_application_files
     setup_python_environment
     prompt_for_credentials
+    install_and_configure_unbound
     install_adguard_home
     generate_ssl_certificates
     configure_nginx
