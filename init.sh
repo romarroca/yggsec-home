@@ -732,14 +732,6 @@ install_and_configure_unbound() {
 
     # Create Unbound configuration directory if needed
     mkdir -p /etc/unbound/unbound.conf.d
-    mkdir -p /var/lib/unbound
-
-    # Download root hints for recursive DNS
-    log_info "Downloading DNS root hints..."
-    if [[ ! -f /var/lib/unbound/root.hints ]] || [[ $(find /var/lib/unbound/root.hints -mtime +30 2>/dev/null) ]]; then
-        wget -q -O /var/lib/unbound/root.hints https://www.internic.net/domain/named.root || \
-            log_warning "Failed to download root hints, will use built-in"
-    fi
 
     # Create YggSec-specific Unbound configuration
     log_info "Configuring Unbound for localhost-only access on port 5353..."
@@ -776,8 +768,7 @@ server:
     use-caps-for-id: yes
     rrset-roundrobin: yes
 
-    # DNSSEC validation
-    auto-trust-anchor-file: "/var/lib/unbound/root.key"
+    # DNSSEC validation (trust anchor configured in root-auto-trust-anchor-file.conf)
     harden-glue: yes
     harden-dnssec-stripped: yes
     harden-algo-downgrade: yes
@@ -806,31 +797,7 @@ server:
 
     # EDNS settings
     edns-buffer-size: 1232
-
-    # Root hints file
-    root-hints: "/var/lib/unbound/root.hints"
 EOFUNBOUND
-
-    # Set proper ownership
-    chown -R unbound:unbound /var/lib/unbound 2>/dev/null || true
-
-    # Initialize trust anchor for DNSSEC if not exists
-    if [[ ! -f /var/lib/unbound/root.key ]]; then
-        log_info "Initializing DNSSEC trust anchor..."
-        if command -v unbound-anchor &> /dev/null; then
-            unbound-anchor -a /var/lib/unbound/root.key || \
-                log_warning "unbound-anchor failed, creating placeholder file"
-        else
-            log_info "unbound-anchor not available, creating placeholder file"
-        fi
-
-        # If still doesn't exist, create an empty file - Unbound will populate it on first start
-        if [[ ! -f /var/lib/unbound/root.key ]]; then
-            touch /var/lib/unbound/root.key
-            chown unbound:unbound /var/lib/unbound/root.key
-            log_info "Created empty root.key - Unbound will populate on first start"
-        fi
-    fi
 
     # Test Unbound configuration
     if unbound-checkconf; then
