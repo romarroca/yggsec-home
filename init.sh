@@ -724,15 +724,8 @@ install_and_configure_unbound() {
     else
         log_info "Installing Unbound..."
 
-        # Install Unbound
-        if [[ "$IS_DIETPI" == true ]]; then
-            # Use dietpi-software for DietPi
-            log_info "Using dietpi-software to install Unbound..."
-            G_AGI unbound
-        else
-            # Standard apt install
-            apt install -y unbound
-        fi
+        # Install Unbound using standard apt (works on DietPi and Debian)
+        apt install -y unbound
 
         log_success "Unbound installed"
     fi
